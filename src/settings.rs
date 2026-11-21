@@ -1,0 +1,1103 @@
+//! 设置: preferences (`.quiet/preferences.json` in the library) and the
+//! settings view — a category list in the sidebar, one page per category,
+//! each page a column of grouped rows. Only what a
+//! user really needs to change lives here.
+
+use fdl_core::vfs::PathExt as _;
+use crate::{theme, themes};
+use gpui::*;
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::RwLock;
+
+// ---- preferences
+
+static FEISHU: AtomicBool = AtomicBool::new(false);
+static LANG: AtomicU8 = AtomicU8::new(Lang::En as u8);
+static MOTION_HIGH: AtomicBool = AtomicBool::new(false);
+static PREFS: RwLock<Option<Preferences>> = RwLock::new(None);
+
+/// The active document theme draws blocks the 飞书 way (else Craft's).
+pub fn feishu() -> bool { FEISHU.load(Ordering::Relaxed) }
+pub(crate) fn set_base(feishu: bool) { FEISHU.store(feishu, Ordering::Relaxed); }
+/// 界面语言, in the order Settings lists them. Chinese strings are the keys:
+/// other languages look them up in `l10n` and fall back to English.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Lang { Zh, En, Ja, Ko, Fr, Es, Ar }
+
+impl Lang {
+    pub const ALL: [Lang; 7] = [Lang::Zh, Lang::En, Lang::Ja, Lang::Ko, Lang::Fr, Lang::Es, Lang::Ar];
+    /// The `language` preference value.
+    pub fn code(self) -> &'static str { match self { Lang::Zh => "zh", Lang::En => "en", Lang::Ja => "ja", Lang::Ko => "ko", Lang::Fr => "fr", Lang::Es => "es", Lang::Ar => "ar" } }
+    /// The language's own name, as Settings lists it.
+    pub fn name(self) -> &'static str { match self { Lang::Zh => "简体中文", Lang::En => "English", Lang::Ja => "日本語", Lang::Ko => "한국어", Lang::Fr => "Français", Lang::Es => "Español", Lang::Ar => "العربية" } }
+}
+
+pub fn lang() -> Lang { Lang::ALL.get(LANG.load(Ordering::Relaxed) as usize).copied().unwrap_or(Lang::En) }
+/// Not Chinese: English, or a language that shows English where it has no string yet.
+pub fn english() -> bool { lang() != Lang::Zh }
+/// 外观 › 动画 is 丰富: folding, the selection and hover animate too (else they answer at once).
+pub fn motion_high() -> bool { MOTION_HIGH.load(Ordering::Relaxed) }
+pub fn tr(zh: &'static str, en: &'static str) -> &'static str { match lang() { Lang::Zh => zh, Lang::En => en, l => crate::l10n::get(l, zh).unwrap_or(en) } }
+/// `localized_format!` for a given language: `zh` / `en` build the two
+/// originals; other languages refill their translation of `template`.
+pub fn localized(lang: Lang, template: &str, zh: impl FnOnce() -> String, en: impl FnOnce() -> String) -> String {
+    match lang { Lang::Zh => zh(), Lang::En => en(), l => crate::l10n::refill(l, template, &zh()).unwrap_or_else(en) }
+}
+
+/// Browsers 打开链接 can offer, by the name `open -a` takes. Only the ones
+/// this Mac actually has are listed; anything else is the system default.
+const BROWSERS: [&str; 8] = ["Safari", "Google Chrome", "Microsoft Edge", "Firefox", "Arc", "Brave Browser", "Vivaldi", "Opera"];
+
+/// At most this many besides 系统默认, so the row stays one line.
+const BROWSERS_SHOWN: usize = 3;
+
+/// The browsers installed here, in [`BROWSERS`] order (empty off macOS).
+pub fn browsers() -> Vec<&'static str> {
+    if !cfg!(target_os = "macos") {
+        return vec![];
+    }
+    let user = std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Applications"));
+    BROWSERS
+        .into_iter()
+        .filter(|name| {
+            let app = format!("{name}.app");
+            Path::new("/Applications").join(&app).fs_exists() || user.as_ref().is_some_and(|u| u.join(&app).fs_exists())
+        })
+        .take(BROWSERS_SHOWN)
+        .collect()
+}
+
+/// The browser a 打开链接 segment stands for (`0`: the system default, "").
+pub fn browser_at(i: usize) -> String {
+    i.checked_sub(1).and_then(|i| browsers().get(i).copied()).unwrap_or_default().to_string()
+}
+/// Whether ⌘N should make a Markdown file: the preferred 快捷新建 type, or the
+/// last one created from the 新建 menu when no fixed type is set.
+pub fn quick_new_markdown() -> bool {
+    let p = prefs();
+    match p.new_default.as_str() { "markdown" => true, "doc" => false, _ => p.last_new == "markdown" }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Preferences {
+    /// Document theme id (themes.rs); empty in files from before themes, see `feishu`.
+    pub theme: String,
+    /// The old two-way switch, still written so older builds keep the base style.
+    pub feishu: bool,
+    /// Still written (true unless Chinese) so older builds show English for a language they lack.
+    pub english: bool,
+    /// `Lang::code`; empty in files from before it, where `english` decides.
+    #[serde(default)]
+    pub language: String,
+    /// Fetch `http(s)` images referenced by documents.
+    pub remote_images: bool,
+    /// The system-wide quick note hotkey is registered.
+    pub quick_hotkey: bool,
+    /// Look for a new version now and then (update.rs).
+    pub auto_update: bool,
+    /// Light or dark look: "light", "dark", or empty to follow the system.
+    pub appearance: String,
+    /// The last version that opened this library (changelog.rs).
+    pub seen_version: String,
+    /// 动画: "high" animates folding, the selection and hover; empty keeps them instant.
+    pub motion: String,
+    /// 快捷新建 (⌘N) 的默认类型: "doc", "markdown", or empty to repeat the last one.
+    pub new_default: String,
+    /// The type last created from the 新建 menu: "doc" or "markdown" (empty before any).
+    pub last_new: String,
+    /// 网页搜索 engine: "baidu", "bing", "duckduckgo"; empty is Google.
+    pub search_engine: String,
+    /// 启动时打开: true shows the home page; false returns to the
+    /// document read last (#234).
+    pub start_home: bool,
+    /// 打开链接: the browser a link opens in ("Safari", "Microsoft Edge"…),
+    /// empty for the system default.
+    pub browser: String,
+    /// 外观 › 窗口背景: paint the window opaque instead of letting the desktop
+    /// show through the sidebar material.
+    pub opaque_window: bool,
+    /// 外观 › 界面字号: "small" or "large"; empty is the 13pt standard.
+    pub ui_font: String,
+    /// When 稍后 put off moving the library to real folders (Unix seconds; 0 never).
+    pub migrate_later: u64,
+}
+
+/// A week between asks to move the library to real folders.
+const MIGRATE_ASK_EVERY: u64 = 7 * 24 * 3600;
+fn unix_now() -> u64 { web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0) }
+
+/// 稍后 on the move to real folders: remember when.
+pub fn migrate_later() {
+    let mut p = prefs();
+    p.migrate_later = unix_now();
+    let _ = save(&p);
+}
+
+/// Whether to ask about the move now: never put off, or a week since.
+pub fn migrate_ask_due() -> bool { unix_now().saturating_sub(prefs().migrate_later) >= MIGRATE_ASK_EVERY }
+
+/// Pick the first supported system language; saved preferences still win.
+fn system_lang() -> Lang {
+    sys_locale::get_locales().find_map(|locale| {
+        let code = locale.split(['-', '_']).next().unwrap_or("").to_ascii_lowercase();
+        Lang::ALL.into_iter().find(|l| l.code() == code)
+    }).unwrap_or(Lang::Zh)
+}
+
+impl Default for Preferences {
+    fn default() -> Self {
+        let lang = Lang::Zh;
+        Preferences { theme: String::new(), feishu: true, english: lang != Lang::Zh, language: lang.code().into(), remote_images: true, quick_hotkey: true, auto_update: true, appearance: String::new(), seen_version: String::new(), motion: String::new(), new_default: String::new(), last_new: String::new(), search_engine: String::new(), start_home: false, browser: String::new(), opaque_window: false, ui_font: String::new(), migrate_later: 0 }
+    }
+}
+
+impl Preferences {
+    pub fn theme_id(&self) -> String {
+        if !self.theme.is_empty() { self.theme.clone() } else if self.feishu { "feishu".into() } else { "craft".into() }
+    }
+    pub fn lang(&self) -> Lang {
+        Lang::ALL.into_iter().find(|l| l.code() == self.language).unwrap_or(if self.english { Lang::En } else { Lang::Zh })
+    }
+    pub fn set_lang(&mut self, lang: Lang) {
+        self.language = lang.code().into();
+        self.english = lang != Lang::Zh;
+    }
+}
+
+fn path() -> std::path::PathBuf { crate::store::Store::internal_dir().join("preferences.json") }
+
+/// Show the interface in `lang` without saving it (first launch, before the library exists).
+pub(crate) fn show_lang(lang: Lang) {
+    let mut p = prefs();
+    p.set_lang(lang);
+    apply(p);
+}
+
+pub fn load() {
+    let p = fdl_core::vfs::read(path()).ok().and_then(|b| serde_json::from_slice::<Preferences>(&b).ok()).unwrap_or_default();
+    apply(p);
+}
+
+fn apply(p: Preferences) {
+    FEISHU.store(p.feishu, Ordering::Relaxed);
+    LANG.store(p.lang() as u8, Ordering::Relaxed);
+    crate::model::set_untitled(translate(crate::model::UNTITLED, p.lang()));
+    MOTION_HIGH.store(p.motion == "high", Ordering::Relaxed);
+    // Before the themes are read (startup) the base comes from `feishu`.
+    themes::select(&p.theme_id());
+    *PREFS.write().unwrap() = Some(p);
+}
+
+/// Tell the OS which look the app wants (macOS: the window material, menus
+/// and dialogs follow it); empty follows the system.
+pub fn apply_appearance(pref: &str) {
+    #[cfg(target_os = "macos")]
+    unsafe {
+        use objc::{class, msg_send, sel, sel_impl};
+        use objc::runtime::Object;
+        let app: *mut Object = msg_send![class!(NSApplication), sharedApplication];
+        let name = match pref { "light" => Some(c"NSAppearanceNameAqua"), "dark" => Some(c"NSAppearanceNameDarkAqua"), _ => None };
+        let look: *mut Object = match name {
+            Some(n) => { let s: *mut Object = msg_send![class!(NSString), stringWithUTF8String: n.as_ptr()]; msg_send![class!(NSAppearance), appearanceNamed: s] }
+            None => std::ptr::null_mut(),
+        };
+        let _: () = msg_send![app, setAppearance: look];
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = pref;
+}
+
+/// Draw light or dark as the preference and the system say; true when the look changed.
+pub fn sync_dark(cx: &App) -> bool {
+    let on = match prefs().appearance.as_str() {
+        "light" => false,
+        "dark" => true,
+        _ => matches!(cx.window_appearance(), WindowAppearance::Dark | WindowAppearance::VibrantDark),
+    };
+    let changed = theme::set_dark(on);
+    if changed { themes::touch(); }
+    changed
+}
+
+/// The current preferences (loaded on first use).
+pub fn prefs() -> Preferences {
+    if PREFS.read().unwrap().is_none() { load(); }
+    PREFS.read().unwrap().clone().unwrap_or_default()
+}
+
+pub(crate) fn save(p: &Preferences) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::store::Store::internal_dir();
+    fdl_core::vfs::create_dir_all(&root)?;
+    let tmp = root.join("preferences.json.tmp");
+    let mut f = fdl_core::vfs::File::create(&tmp)?;
+    f.write_all(&serde_json::to_vec_pretty(p)?)?;
+    f.sync_all()?;
+    fdl_core::vfs::rename(tmp, path())?;
+    apply(p.clone());
+    Ok(())
+}
+
+
+pub fn label(text: impl AsRef<str>) -> String { translate(text.as_ref(), lang()).to_string() }
+
+pub fn text(text: &str) -> &str { translate(text, lang()) }
+
+/// `localize` for any language: its own string, else the English one.
+pub(crate) fn translate(text: &str, lang: Lang) -> &str {
+    match lang { Lang::Zh | Lang::En => localize(text, lang == Lang::En), l => crate::l10n::get(l, text).unwrap_or_else(|| localize(text, true)) }
+}
+
+pub(crate) fn localize(text: &str, english: bool) -> &str {
+    if !english { return text; }
+    match text {
+        "主页" => "Home",
+        "我的文档" => "My documents",
+        "置顶" => "Pinned",
+        "收藏" => "Favorites",
+        "设置" => "Settings",
+        "新建" => "New",
+        "新建文档" => "New document",
+        "搜索" => "Search",
+        "搜索文档…" => "Search documents…",
+        "搜索文档..." => "Search documents...",
+        "最近访问" => "Recently visited",
+        "最近访问时间" => "Last visited",
+        "最近修改时间" => "Last modified",
+        "创建时间" => "Date created",
+        "修改时间" => "Date modified",
+        "文档名称" => "Document name",
+        "名称" => "Name",
+        "回收站" => "Trash",
+        "存储管理" => "Storage",
+        "更多" => "More",
+        "返回" => "Back",
+        "取消" => "Cancel",
+        "确定" => "OK",
+        "删除" => "Delete",
+        "移到回收站" => "Move to trash",
+        "恢复" => "Restore",
+        "清空回收站" => "Empty trash",
+        "永久删除" => "Delete permanently",
+        "彻底删除" => "Delete permanently",
+        "重命名" => "Rename",
+        "创建副本" => "Duplicate",
+        "复制" => "Copy",
+        "粘贴" => "Paste",
+        "剪切" => "Cut",
+        "全选" => "Select all",
+        "导入" => "Import",
+        "导出" => "Export",
+        "下载" => "Download",
+        "移动到" => "Move to",
+        "添加到收藏" => "Add to favorites",
+        "取消收藏" => "Remove from favorites",
+        "取消置顶" => "Unpin",
+        "文档信息" => "Document information",
+        "字数统计" => "Word count",
+        "快捷键" => "Keyboard shortcuts",
+        "最近浏览" => "Recently viewed",
+        "所有文档" => "All documents",
+        "按名称" => "By name",
+        "上次浏览" => "Last viewed",
+        "创建" => "Created",
+        "修改" => "Modified",
+        "访问" => "Visited",
+        "收藏时间" => "Date favorited",
+        "文档标题" => "Document title",
+        "暂无文档" => "No documents yet",
+        "没有找到相关文档" => "No documents found",
+        "暂无收藏文档" => "No favorites yet",
+        "收藏的文档会显示在这里" => "Your favorites will appear here",
+        "左对齐" => "Align left",
+        "居中对齐" => "Align center",
+        "右对齐" => "Align right",
+        "正文" => "Text",
+        "一级标题" => "Heading 1",
+        "二级标题" => "Heading 2",
+        "三级标题" => "Heading 3",
+        "四级标题" => "Heading 4",
+        "五级标题" => "Heading 5",
+        "六级标题" => "Heading 6",
+        "加粗" => "Bold",
+        "斜体" => "Italic",
+        "下划线" => "Underline",
+        "删除线" => "Strikethrough",
+        "行内代码" => "Inline code",
+        "链接" => "Link",
+        "代码块" => "Code block",
+        "无序列表" => "Bulleted list",
+        "有序列表" => "Numbered list",
+        "任务" => "Task",
+        "待办事项" => "To-do list",
+        "引用" => "Quote",
+        "分割线" => "Divider",
+        "高亮块" => "Callout",
+        "图片" => "Image",
+        "表格" => "Table",
+        "分栏" => "Columns",
+        "基础" => "Basic",
+        "常用" => "Common",
+        "更多类型" => "More blocks",
+        "文字颜色" => "Text color",
+        "背景颜色" => "Background color",
+        "边框颜色" => "Border color",
+        "添加图标" => "Add icon",
+        "添加封面" => "Add cover",
+        "编辑封面" => "Edit cover",
+        "移除封面" => "Remove cover",
+        "自动换行" => "Wrap lines",
+        "取消换行" => "Unwrap lines",
+        "文档库内搜索" => "Search documents",
+        "网页搜索" => "Search the web",
+        "展开" => "Expand",
+        "收起" => "Collapse",
+        "选择语言" => "Choose language",
+        "视频或文件" => "Video or file",
+        "清除格式" => "Clear formatting",
+        "转换为" => "Turn into",
+        "向上插入" => "Insert above",
+        "向下插入" => "Insert below",
+        "保存" => "Save",
+        "关闭" => "Close",
+        "缩进和对齐" => "Indent and align",
+        "缩进" => "Indent",
+        "颜色" => "Color",
+        "在下方添加" => "Add below",
+        "分隔线" => "Divider",
+        "团队协作" => "Collaboration",
+        "小应用" => "Widgets",
+        "按钮" => "Button",
+        "子页面列表" => "Child pages",
+        "日期提醒" => "Date reminder",
+        "倒计时" => "Countdown",
+        "公式" => "Equation",
+        "Craft for macOS 的文档样式：SF Pro 15 / 22，虚点分隔线，蓝色强调。" => "Craft-style typography: SF Pro 15 / 22, dotted dividers and blue accents.",
+        "飞书文档的正文样式：16 / 26，标题 Medium，蓝色链接。" => "Feishu-style typography: 16 / 26 body text, medium headings and blue links.",
+        "Notion 的默认浅色页面：暖灰正文、紧凑的块、灰底红字的行内代码、深色引用竖线。" => "Warm gray text, compact blocks, red inline code and dark quote borders.",
+        "Obsidian 默认主题的浅色模式：紫色强调、浅灰列表符号、更大的标题与段落间距。" => "Purple accents, subtle list markers and generous heading and paragraph spacing.",
+        "阅读模式切回编辑" => "Switch from reading to editing",
+        "复制 / 剪切 / 粘贴" => "Copy / Cut / Paste",
+        "逐字扩选" => "Extend selection by character",
+        "逐行扩选" => "Extend selection by line",
+        "选到行首 / 行尾" => "Select to start / end of line",
+        "选到文档开头 / 结尾" => "Select to start / end of document",
+        "# 空格" => "# Space",
+        "## 空格" => "## Space",
+        "### 空格" => "### Space",
+        "1. 空格" => "1. Space",
+        "- 空格 或 * 空格" => "- Space or * Space",
+        "任务列表" => "To-do list",
+        "[] 空格" => "[] Space",
+        "增加缩进" => "Increase indent",
+        "减少缩进" => "Decrease indent",
+        "> 空格" => "> Space",
+        "代码" => "Code",
+        "`代码`" => "`code`",
+        "``` 空格 或 ``` 代码语言 空格" => "``` Space or ``` language Space",
+        "**文字** 空格" => "**text** Space",
+        "*文字* 空格" => "*text* Space",
+        "~文字~ 空格" => "~text~ Space",
+        "~~文字~~ 空格" => "~~text~~ Space",
+        "$$文字$$" => "$$text$$",
+        "--- 或 ***" => "--- or ***",
+        "已切换为阅读模式" => "Switched to reading mode",
+        "已切换为编辑模式" => "Switched to editing mode",
+        "编辑" => "Edit",
+        "可编辑文档" => "Edit this document",
+        "阅读" => "Read",
+        "仅查看或评论文档" => "View this document",
+        "键盘快捷键" => "Keyboard shortcuts",
+        "Markdown 是一种快速输入带格式文本的方式，让你书写文档时行云流水，一气呵成，例如输入#空格，即可输入一级标题。" => "Markdown lets you format text as you type. For example, type # followed by Space to create a heading.",
+        "页宽设置" => "Page width",
+        "查找和替换" => "Find and replace",
+        "从“置顶”移除" => "Unpin",
+        "添加到“置顶”" => "Pin",
+        "下载为" => "Download as",
+        "打印" => "Print",
+        "显示引用列表" => "Show references",
+        "复制为 Markdown" => "Copy as Markdown",
+        "复制文件地址" => "Copy file path",
+        "已复制文件地址" => "File path copied",
+        "已复制为 Markdown" => "Copied as Markdown",
+        "为当前窗口选择合适页宽" => "Choose a page width for this window",
+        "默认" => "Default",
+        "较宽" => "Wide",
+        "全宽" => "Full width",
+        "几秒前" => "a few seconds ago",
+        "今天" => "Today",
+        "昨天" => "Yesterday",
+        "前天" => "Two days ago",
+        "天" => "d",
+        "时" => "h",
+        "分" => "min",
+        "秒" => "s",
+        "无效公式" => "Invalid equation",
+        "目录下暂无子页面" => "No child pages yet",
+        "创建时间（最新优先）" => "Created (newest first)",
+        "标题（升序）" => "Title (A–Z)",
+        "切换为宫格视图" => "Switch to grid view",
+        "切换为列表视图" => "Switch to list view",
+        "当前列表暂无内容" => "Nothing here yet",
+        "标题" => "Title",
+        "空白文档" => "Untitled",
+        "退出" => "Exit",
+        "退出批量操作" => "Exit selection mode",
+        "点击展开" => "Click to expand",
+        "点击折叠" => "Click to collapse",
+        "批量操作" => "Select documents",
+        "批量管理" => "Manage",
+        "无法选中，选择的页面数已到达上限" => "Selection limit reached",
+        "在新窗口中打开" => "Open in new window",
+        "搜索目标位置" => "Search destinations",
+        "移动成功" => "Moved successfully",
+        "无搜索结果" => "No results",
+        "从 我的文档 移动到" => "Move from My documents to",
+        "信息与数据" => "Information and data",
+        "概览" => "Overview",
+        "最近修改" => "Last modified",
+        "文档统计" => "Document statistics",
+        "总字数" => "Words",
+        "总字符数" => "Characters",
+        "大小" => "Size",
+        "当前系统不支持" => "Not supported on this platform",
+        "打印超时，请稍后重试" => "Printing timed out. Please try again.",
+        "打印失败，请重试" => "Printing failed. Please try again.",
+        "需要 Microsoft Edge WebView2 运行时" => "Requires the Microsoft Edge WebView2 Runtime",
+        "没有找到匹配的结果，尝试其他关键词进行搜索" => "No results. Try another search term.",
+        "请先关闭正在编辑这些文档的其他窗口，再删除" => "Close other windows editing these documents before deleting them.",
+        "删除成功" => "Deleted successfully",
+        "已添加到“置顶”" => "Pinned",
+        "已从“置顶”移除" => "Unpinned",
+        "已添加到“收藏”" => "Added to favorites",
+        "已从“收藏”中移除" => "Removed from favorites",
+        "保存失败" => "Save failed",
+        "返回主页" => "Back to Home",
+        "搜索(⌘ + J)" => "Search (⌘ + J)",
+        "导出失败，请重试" => "Export failed. Please try again.",
+        "正在导出文档" => "Exporting document",
+        "文档打印中" => "Printing document",
+        "文件格式不支持" => "Unsupported file format",
+        "导入失败，请检查文件格式" => "Import failed. Check the file format.",
+        "导出 Markdown 设置" => "Export Markdown",
+        "内容范围" => "Content",
+        "仅文本（不含图片和附件）" => "Text only (no images or attachments)",
+        "所有内容" => "All content",
+        "即将彻底删除" => "Deleting soon",
+        "回收站暂无内容" => "Trash is empty",
+        "位置" => "Location",
+        "剩余时间" => "Time remaining",
+        "恢复成功。部分文档由于原位置不存在，已恢复到“我的文档”" => "Restored. Some documents were moved to My documents because their original location no longer exists.",
+        "恢复成功" => "Restored successfully",
+        "已彻底删除" => "Permanently deleted",
+        "清空" => "Empty",
+        "已清空回收站" => "Trash emptied",
+        "确认清空回收站？" => "Empty the Trash?",
+        "删除的内容将进入回收站，30 天后自动彻底删除" => "Deleted items will be moved to Trash and permanently deleted after 30 days.",
+        "确认恢复？" => "Restore this document?",
+        "确认后将恢复至原位置" => "The document will be restored to its original location.",
+        "确认彻底删除？" => "Delete permanently?",
+        "彻底删除后，该页面及其子页面将无法恢复" => "This page and its child pages cannot be recovered after permanent deletion.",
+        "是否隐藏引用列表？" => "Hide references?",
+        "选择隐藏后，协作者将无法查看本文的引用列表。如需重新显示，可点击文档右上角的更多按钮“...”，打开“显示引用列表”开关。" => "The reference list will be hidden. To show it again, open the document’s More menu and turn on Show references.",
+        "隐藏" => "Hide",
+        "是否显示引用列表？" => "Show references?",
+        "选择显示后，协作者可再次查看本文的引用列表。" => "The document’s reference list will be visible again.",
+        "显示" => "Show",
+        "文档保存失败" => "Could not save document",
+        "重试" => "Retry",
+        "不再提示" => "Do not ask again",
+        "放弃修改" => "Discard changes",
+        "Quiet.md · 快速笔记" => "Quiet.md · Quick note",
+        "没有匹配结果，换个关键词试试吧" => "No results. Try another search term.",
+        "本文被以下文档所引用" => "Referenced by these documents",
+        "隐藏引用列表" => "Hide references",
+        "反向引用" => "Backlinks",
+        "本文引用" => "Links from this document",
+        "此文档已被删除" => "This document was deleted",
+        "本文暂未被其它文档引用" => "No backlinks yet",
+        "本文暂未引用其它文档" => "No linked documents yet",
+        "查看更多" => "Show more",
+        "当前为阅读模式，请切换为编辑模式后重试" => "Switch to editing mode to make changes.",
+        "表情符号" => "Emoji",
+        "动物" => "Animals",
+        "食物" => "Food",
+        "活动" => "Activities",
+        "地点" => "Places",
+        "物件" => "Objects",
+        "符号" => "Symbols",
+        "最近" => "Recent",
+        "随机" => "Random",
+        "移除" => "Remove",
+        "输入“/”快速插入内容" => "Type / to insert content",
+        "点击更换图标" => "Click to change icon",
+        "请输入标题" => "Enter a title",
+        "请输入有效的链接。" => "Enter a valid link.",
+        "确认" => "Confirm",
+        "文本" => "Text",
+        "复制原始网页链接" => "Copy original link",
+        "链接已复制到剪贴板" => "Link copied to clipboard",
+        "编辑链接" => "Edit link",
+        "移除链接" => "Remove link",
+        "渐变" => "Gradients",
+        "极光" => "Aurora",
+        "山峦" => "Mountains",
+        "几何" => "Geometry",
+        "上传图片" => "Upload image",
+        "展示文档信息" => "Show document information",
+        "更换图标" => "Change icon",
+        "拖拽以调整图片的位置" => "Drag to reposition the image",
+        "选择图片" => "Choose image",
+        "调整图片位置" => "Reposition image",
+        "官方图库" => "Gallery",
+        "本地上传" => "Upload",
+        "推荐使用尺寸为 2,000 × 400 的图片，显示效果最佳" => "For best results, use a 2,000 × 400 image.",
+        "新增分栏" => "Add column",
+        "图片格式仅支持 jpeg、jpg、png、gif、webp、bmp" => "Supported image formats: JPEG, JPG, PNG, GIF, WebP and BMP",
+        "识别图片宽高失败" => "Could not read image dimensions",
+        "上传图片大小不能超过 20 MB" => "Images must be 20 MB or smaller",
+        "文件不存在" => "File not found",
+        "文件夹不存在" => "Folder not found",
+        "这个文件夹在文档库里，它的内容已经在我的文档中" => "This folder is inside the library; its notes are already in My documents",
+        "这个文件夹里有文档库，不能作为本机文件夹打开" => "This folder holds the library, so it can't be opened as a folder on this computer",
+        "本机文件夹和文档库之间只能复制，不能移动" => "Between folders on this computer and the library, notes can be copied but not moved",
+        "加载失败，" => "Could not load. ",
+        "点击重试" => "Retry",
+        "图片过小，请放大后重试" => "Image too small. Enlarge it and try again.",
+        "保存裁剪" => "Save crop",
+        "裁剪" => "Crop",
+        "重置图片" => "Reset image",
+        "编辑描述" => "Edit caption",
+        "添加描述" => "Add caption",
+        "上一张" => "Previous image",
+        "下一张" => "Next image",
+        "缩小" => "Zoom out",
+        "放大" => "Zoom in",
+        "适应页面" => "Fit to page",
+        "原始尺寸" => "Actual size",
+        "旋转" => "Rotate",
+        "红色" => "Red",
+        "橙色" => "Orange",
+        "黄色" => "Yellow",
+        "绿色" => "Green",
+        "蓝色" => "Blue",
+        "紫色" => "Purple",
+        "灰色" => "Gray",
+        "倒计时已结束" => "Countdown finished",
+        "设置的倒计时时间必须晚于当前 GMT+8 的时间" => "Choose a time later than the current time in GMT+8.",
+        "输入倒计时时长" => "Enter duration",
+        "选择具体日期" => "Choose date and time",
+        "倒计时结束时显示气泡提醒" => "Show a notification when the countdown ends",
+        "倒计时设置" => "Countdown settings",
+        "一" => "Mon",
+        "二" => "Tue",
+        "三" => "Wed",
+        "四" => "Thu",
+        "五" => "Fri",
+        "六" => "Sat",
+        "日" => "Sun",
+        "周一" => "Mon",
+        "周二" => "Tue",
+        "周三" => "Wed",
+        "周四" => "Thu",
+        "周五" => "Fri",
+        "周六" => "Sat",
+        "周日" => "Sun",
+        "事件发生时" => "At time of event",
+        "提前 5 分钟" => "5 minutes before",
+        "提前 15 分钟" => "15 minutes before",
+        "提前 30 分钟" => "30 minutes before",
+        "提前 1 小时" => "1 hour before",
+        "提前 2 小时" => "2 hours before",
+        "提前 1 天" => "1 day before",
+        "提前 2 天" => "2 days before",
+        "提前 1 周" => "1 week before",
+        "当天 (09:00)" => "Same day (09:00)",
+        "提前 1 天 (09:00)" => "1 day before (09:00)",
+        "提前 2 天 (09:00)" => "2 days before (09:00)",
+        "提前 1 周 (09:00)" => "1 week before (09:00)",
+        "当天 (18:00)" => "Same day (18:00)",
+        "明天" => "Tomorrow",
+        "该提醒已被删除。" => "This reminder was deleted.",
+        "设置时间" => "Set time",
+        "提醒" => "Reminder",
+        "收起目录" => "Hide table of contents",
+        "展开目录" => "Show table of contents",
+        "#### 空格" => "#### Space",
+        "##### 空格" => "##### Space",
+        "列" => "columns",
+        "行" => "rows",
+        "插入列" => "Insert column",
+        "插入行" => "Insert row",
+        "添加 LaTeX 公式" => "Add LaTeX equation",
+        "上一处" => "Previous match",
+        "下一处" => "Next match",
+        "查找" => "Find",
+        "替换为" => "Replace with",
+        "全部替换" => "Replace all",
+        "替换" => "Replace",
+        "请输入代码块名称" => "Enter code block name",
+        "输入图片描述" => "Enter image caption",
+        "新编号为" => "Start at",
+        "继续之前的编号" => "Continue numbering",
+        "开始新列表" => "Start new list",
+        "修改编号值" => "Change list number",
+        "未能找到相关结果" => "No results found",
+        "插入支持富文本的表格" => "Insert a rich text table",
+        "选择栏数" => "Choose number of columns",
+        "字体颜色" => "Text color",
+        "恢复默认" => "Reset to default",
+        "填充颜色" => "Fill color",
+        "按 ESC 完成输入" => "Press Esc to finish",
+        "无匹配结果" => "No matches",
+        "粗体" => "Bold",
+        "**文本** 空格" => "**text** Space",
+        "~~文本~~ 空格" => "~~text~~ Space",
+        "*文本* 空格" => "*text* Space",
+        "~文本~ 空格" => "~text~ Space",
+        "拆分单元格" => "Split cells",
+        "合并单元格" => "Merge cells",
+        "单元格背景颜色" => "Cell background",
+        "删除列" => "Delete columns",
+        "删除行" => "Delete rows",
+        "顶部对齐" => "Align top",
+        "垂直居中" => "Align middle",
+        "底部对齐" => "Align bottom",
+        "标题行" => "Header row",
+        "标题列" => "Header column",
+        "均分列宽" => "Distribute columns evenly",
+        "粘贴或输入链接" => "Paste or enter a link",
+        "输入文本" => "Enter text",
+        "在文档内查找" => "Find in document",
+        "请输入文字" => "Enter text",
+        "编号" => "Number",
+        "请输入公式" => "Enter an equation",
+        "插入图片" => "Insert image",
+        "请输入按钮" => "Enter button text",
+        "请输入链接地址" => "Enter link URL",
+        "按钮不能为空" => "Button text is required",
+        "按钮文字不能超过 200 个字" => "Button text must be 200 characters or fewer",
+        "超链接不合法，请重新输入" => "Invalid link. Please enter a valid URL.",
+        "当前位置暂不支持该功能" => "This action is not available here.",
+        "按钮文字" => "Button text",
+        "按钮颜色" => "Button color",
+        "执行操作" => "Action",
+        "超链接地址" => "Link URL",
+        "选择按钮类型" => "Choose button type",
+        "无法播放" => "Cannot play",
+        "暂停" => "Pause",
+        "播放" => "Play",
+        "取消静音" => "Unmute",
+        "静音" => "Mute",
+        "预览" => "Preview",
+        "无法播放该音频" => "Cannot play this audio",
+        "全屏" => "Full screen",
+        "文本视图" => "Text view",
+        "卡片视图" => "Card view",
+        "预览视图" => "Preview view",
+        "插入视频或文件" => "Insert video or file",
+        "文件读取失败" => "Could not read file",
+        "未命名文档" => "Untitled",
+        "画板" => "Board",
+        // 数据表
+        "查看" => "Open",
+        "退出全屏" => "Exit full screen",
+        "上周" => "Last week",
+        "上月" => "Last month",
+        "下周" => "Next week",
+        "下月" => "Next month",
+        "不为空" => "Is not empty",
+        "不包含" => "Does not contain",
+        "不展示" => "None",
+        "不等于" => "Is not",
+        "业务" => "Business",
+        "个隐藏字段" => "hidden fields",
+        "中等" => "Medium",
+        "为空" => "Is empty",
+        "人员" => "Person",
+        "人民币" => "Chinese yuan",
+        "任一" => "Any",
+        "位" => "places",
+        "位小数" => "decimal places",
+        "低" => "Short",
+        "俄罗斯卢布" => "Russian ruble",
+        "保留" => "Keep",
+        "修改字段/列" => "Edit field",
+        "倒序" => "Descending",
+        "允许关联多条记录" => "Allow linking to multiple records",
+        "全部展开" => "Expand all",
+        "全部折叠" => "Collapse all",
+        "全部显示" => "Show all",
+        "全部隐藏" => "Hide all",
+        "公式内容" => "Formula",
+        "公式有效" => "Formula is valid",
+        "关联" => "Link",
+        "关联到" => "Link to",
+        "关联字段" => "Link field",
+        "关联的数据表" => "Linked table",
+        "具体日期" => "Exact date",
+        "冻结至此字段/列" => "Freeze up to this field",
+        "函数" => "Functions",
+        "分组" => "Group",
+        "创建于" => "Created",
+        "删除字段/列" => "Delete field",
+        "个字段" => "fields",
+        "删除数据表" => "Delete table",
+        "删除视图" => "Delete view",
+        "删除记录" => "Delete record",
+        "删除选项" => "Delete option",
+        "加拿大元" => "Canadian dollar",
+        "包含" => "Contains",
+        "千分位" => "Thousands separator",
+        "千分位（小数点）" => "Thousands separator (decimal)",
+        "单选" => "Single select",
+        "印度卢比" => "Indian rupee",
+        "原样引用" => "Original values",
+        "去重" => "Unique values",
+        "双向关联" => "Two-way link",
+        "取消冻结" => "Unfreeze",
+        "取消选择" => "Deselect",
+        "合并文本" => "Join text",
+        "向上插入 1 行" => "Insert row above",
+        "向下插入 1 行" => "Insert row below",
+        "向右插入字段/列" => "Insert field right",
+        "向左插入字段/列" => "Insert field left",
+        "唯一值" => "Unique",
+        "地理位置" => "Location",
+        "填色" => "Color",
+        "复制为 Markdown 表格" => "Copy as Markdown table",
+        "复制字段/列" => "Duplicate field",
+        "复制视图" => "Duplicate view",
+        "复选框" => "Checkbox",
+        "多维表格" => "Base",
+        "多选" => "Multiple select",
+        "大于" => "Greater than",
+        "大于或等于" => "Greater than or equal",
+        "字段与函数" => "Fields and functions",
+        "字段引用" => "Field references",
+        "字段格式" => "Format",
+        "字段类型" => "Field type",
+        "字段配置" => "Fields",
+        "导入 CSV 为新数据表" => "Import CSV as new table",
+        "导出为 CSV" => "Export as CSV",
+        "小于" => "Less than",
+        "小于或等于" => "Less than or equal",
+        "小数位数" => "Decimal places",
+        "已勾选" => "Checked",
+        "已填写" => "Filled",
+        "已填写占比" => "Percent filled",
+        "已选" => "Selected",
+        "巴西雷亚尔" => "Brazilian real",
+        "常规" => "General",
+        "平均值" => "Average",
+        "成员" => "Members",
+        "所有" => "All",
+        "按 A 到 Z 排序" => "Sort A to Z",
+        "按 Z 到 A 排序" => "Sort Z to A",
+        "按此字段分组" => "Group by this field",
+        "按此字段筛选" => "Filter by this field",
+        "排序" => "Sort",
+        "搜索记录" => "Search records",
+        "数字" => "Number",
+        "数字格式" => "Number format",
+        "数据表" => "Data table",
+        "整数" => "Integer",
+        "新增字段" => "Add field",
+        "新增记录" => "Add record",
+        "新建数据表" => "New table",
+        "新建视图" => "New view",
+        "新建选项" => "Create option",
+        "新记录默认填入创建日期" => "Default to the creation date",
+        "无法读取数据表" => "Could not read the data table",
+        "无结果" => "No results",
+        "日历" => "Calendar",
+        "日历视图" => "Calendar view",
+        "日期格式" => "Date format",
+        "早于" => "Is before",
+        "显示时间" => "Include time",
+        "晚于" => "Is after",
+        "暂未支持" => " is not supported yet",
+        "最后更新于" => "Last modified",
+        "最后更新时间" => "Last modified time",
+        "最大值" => "Max",
+        "最大分值" => "Maximum",
+        "最小值" => "Min",
+        "最早" => "Earliest",
+        "最晚" => "Latest",
+        "未分类" => "Uncategorized",
+        "未勾选" => "Unchecked",
+        "未命名数据表" => "Untitled data table",
+        "未命名记录" => "Untitled record",
+        "未填写" => "Empty",
+        "未填写占比" => "Percent empty",
+        "未来 30 天内" => "Next 30 days",
+        "未来 7 天内" => "Next 7 days",
+        "本周" => "This week",
+        "本月" => "This month",
+        "条件" => "conditions",
+        "条码" => "Barcode",
+        "条记录" => "records",
+        "条，使用筛选缩小范围" => "more: narrow them down with a filter",
+        "查找引用" => "Lookup",
+        "查找或创建选项" => "Find or create an option",
+        "查看详情" => "Open record",
+        "欧元" => "Euro",
+        "求和" => "Sum",
+        "没有符合筛选条件的记录" => "No records match the filter",
+        "没有记录" => "No records",
+        "没有选项" => "No options",
+        "添加人员" => "Add person",
+        "添加成员" => "Add member",
+        "添加条件" => "Add condition",
+        "添加记录" => "Add record",
+        "添加选项" => "Add option",
+        "添加附件" => "Add attachment",
+        "港元" => "Hong Kong dollar",
+        "澳大利亚元" => "Australian dollar",
+        "瑞士法郎" => "Swiss franc",
+        "甘特图" => "Gantt",
+        "甘特视图" => "Gantt view",
+        "电话号码" => "Phone",
+        "百分比" => "Percent",
+        "百分比（小数点）" => "Percent (decimal)",
+        "看板" => "Kanban",
+        "看板视图" => "Kanban view",
+        "看板需要按单选字段分组，请先添加一个单选字段" => "A kanban is grouped by a single select field: add one first",
+        "空" => "Empty",
+        "符合以下" => "Match",
+        "等于" => "Is",
+        "筛选" => "Filter",
+        "统计" => "Summary",
+        "编号前缀" => "Prefix",
+        "编号前缀，例如 NO." => "Prefix, e.g. NO.",
+        "美元" => "US dollar",
+        "自动编号" => "Auto number",
+        "英镑" => "Pound sterling",
+        "行高" => "Row height",
+        "表单" => "Form",
+        "表单视图" => "Form view",
+        "表格视图" => "Grid view",
+        "要引用的字段" => "Field to look up",
+        "计数" => "Count",
+        "计数（非空）" => "Count (non-empty)",
+        "计算方式" => "Calculation",
+        "记录总数" => "Count",
+        "设置分组条件" => "Group by",
+        "设置填色条件" => "Color rows",
+        "设置排序条件" => "Sort by",
+        "设置筛选条件" => "Filter",
+        "设置行高" => "Row height",
+        "评分" => "Rating",
+        "请先添加关联字段" => "Add a link field first",
+        "已删除的数据表" => "Deleted table",
+        "是" => "Yes",
+        "否" => "No",
+        "已删除的字段" => "Deleted field",
+        "这个字段来自有多张数据表的旧文件：它照常显示，设置不能再修改。" => "This field comes from an older file with several tables. It still shows its values, but its settings can no longer be changed.",
+        "请输入" => "Enter",
+        "请输入字段标题" => "Field name",
+        "请输入选项" => "Option name",
+        "请输入默认值" => "Default value",
+        "请选择人员" => "Choose people",
+        "请选择关联字段" => "Choose a link field",
+        "请选择关联字段和要引用的字段" => "Choose a link field and the field to look up",
+        "请选择日期" => "Choose a date",
+        "请选择要引用的字段" => "Choose the field to look up",
+        "请选择记录" => "Choose records",
+        "请选择选项" => "Choose options",
+        "货币" => "Currency",
+        "超链接" => "URL",
+        "超高" => "Extra tall",
+        "输入名字后回车添加" => "Type a name and press Enter",
+        "输入名称后回车新建选项" => "Type a name and press Enter to create an option",
+        "过去 30 天内" => "Past 30 days",
+        "过去 7 天内" => "Past 7 days",
+        "还有" => "And",
+        "还没有附件" => "No attachments yet",
+        "进度" => "Progress",
+        "选择一个单选或人员字段作为看板的分组依据" => "Choose a single select or person field to stack the kanban by",
+        "选择字段" => "Choose a field",
+        "选择条件" => "Add",
+        "选项倒序" => "Options, last first",
+        "选项内容" => "Options",
+        "选项名称" => "Option name",
+        "选项顺序" => "Options, first to last",
+        "阿联酋迪拉姆" => "UAE dirham",
+        "附件" => "Attachment",
+        "隐藏字段/列" => "Hide field",
+        "韩元" => "South Korean won",
+        "顺序" => "Ascending",
+        "高" => "Tall",
+        "高级" => "Advanced",
+        "默认值" => "Default value",
+        "日期" => "Date",
+        "添加" => "Add",
+        "清除" => "Clear",
+        "未命名画板" => "Untitled board",
+        "退出画板" => "Exit board",
+        "空画板" => "Empty board",
+        "双击打开画板" => "Double-click to open the board",
+        "重置缩放" => "Reset zoom",
+        "缩放到全部内容" => "Zoom to fit all elements",
+        "打开超链接" => "Open link",
+        "关注文档更新" => "Follow document updates",
+        "刚刚" => "just now",
+        "文档不存在" => "Document not found",
+        "文档文件已不在原处，可能已被移动或删除" => "The document's file is no longer where it was. It may have been moved or deleted.",
+        "文档已被另一个实例修改，未覆盖磁盘内容。请另存副本或重新载入磁盘版本" => "Another instance modified this document. The file was not overwritten. Save a copy or reload the version on disk.",
+        "这个文档库由更新版本的 Quiet.md 创建，部分内容可能无法正确显示，请升级后再编辑" => "These documents were created by a newer version of Quiet.md. Update the app before editing them.",
+        _ => text,
+    }
+}
+
+#[macro_export]
+macro_rules! localized_format {
+    ($zh:literal, $en:literal $(, $arg:expr)* $(,)?) => {
+        // Other languages translate the Chinese template; the values are read back out of the Chinese text.
+        $crate::settings::localized($crate::settings::lang(), $zh, || format!($zh $(, $arg)*), || format!($en $(, $arg)*))
+    };
+}
+
+/// User titles are content, not translation keys.
+pub fn display_title(title: &str) -> String { crate::model::display_title(title) }
+
+/// Core diagnostics stay independent of UI language. Only known message templates
+/// are translated here; captured paths, document IDs and OS errors are preserved.
+pub fn diagnostic(message: &str) -> String {
+    let l = lang();
+    if l != Lang::Zh && l != Lang::En
+        && let Some(s) = crate::l10n::get(l, message).map(str::to_string).or_else(|| crate::l10n::refill_any(l, message)) { return s; }
+    diagnostic_for(message, english())
+}
+
+fn diagnostic_for(message: &str, english: bool) -> String {
+    if !english { return message.to_string(); }
+    const TEMPLATES: &[(&str, &str)] = &[
+        ("无法读取文档索引：{}", "Could not read document index: {}"),
+        ("无法读取回收站索引：{}", "Could not read Trash index: {}"),
+        ("文档索引已损坏，已从备份恢复（原文件保留为 {}）", "Document index was damaged and restored from backup (original retained as {})."),
+        ("回收站索引已损坏，已从备份恢复（原文件保留为 {}）", "Trash index was damaged and restored from backup (original retained as {})."),
+        ("文档索引已损坏且没有可用备份，部分文档的置顶、层级等信息已重置（原文件保留为 {}）", "Document index was damaged with no usable backup. Some pins and document hierarchy were reset (original retained as {})."),
+        ("回收站索引已损坏且没有可用备份，部分文档的置顶、层级等信息已重置（原文件保留为 {}）", "Trash index was damaged with no usable backup. Some metadata was reset (original retained as {})."),
+        ("回收站已存在同名文档，未覆盖：{}", "A document with this ID already exists in Trash and was not overwritten: {}"),
+        ("文档库已存在同名文档，未覆盖：{}", "A document with this ID already exists in Documents and was not overwritten: {}"),
+        ("文档已移入回收站，文档索引清理失败：{}", "Document moved to Trash, but the document index could not be cleaned up: {}"),
+        ("回收站目录读取不完整：{}", "Could not fully read the Trash directory: {}"),
+        ("无法清理过期回收站文档 {}：{}", "Could not remove expired Trash document {}: {}"),
+        ("回收站索引保存失败：{}", "Could not save Trash index: {}"),
+        ("恢复文档 {} 失败，已恢复的文档保留在文档库", "Could not restore document {}. Documents already restored remain in Documents."),
+        ("文档已恢复，回收站索引清理失败：{}", "Document restored, but the Trash index could not be cleaned up: {}"),
+    ];
+    for (source, target) in TEMPLATES {
+        let parts: Vec<_> = source.split("{}").collect();
+        let Some(mut rest) = message.strip_prefix(parts[0]) else { continue };
+        let mut values = Vec::new();
+        let mut matched = true;
+        for (i, suffix) in parts.iter().enumerate().skip(1) {
+            let split = if i == parts.len() - 1 { rest.strip_suffix(suffix).map(|v| (v, "")) } else { rest.split_once(suffix) };
+            let Some((value, next)) = split else { matched = false; break };
+            values.push(value);
+            rest = next;
+        }
+        if matched && rest.is_empty() {
+            let mut result = String::new();
+            let mut fragments = target.split("{}");
+            result.push_str(fragments.next().unwrap_or_default());
+            for (value, fragment) in values.iter().zip(fragments) { result.push_str(value); result.push_str(fragment); }
+            return result;
+        }
+    }
+    localize(message, true).to_string()
+}
+
+#[cfg(test)]
+mod localization_tests {
+    use fdl_core::vfs::PathExt as _;
+    use super::{localize, diagnostic_for, display_title};
+
+    #[test]
+    fn ui_keys_and_menu_tables_have_english_translations() {
+        fn check(key: &str) {
+            if key.chars().any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c)) {
+                assert_ne!(localize(key, true), key, "Missing English UI translation: {key}");
+                assert_eq!(localize(key, false), key);
+            }
+        }
+        fn walk(dir: &std::path::Path, pattern: &regex::Regex) {
+            for entry in fdl_core::vfs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.fs_is_dir() { walk(&path, pattern); }
+                else if path.extension().is_some_and(|ext| ext == "rs") {
+                    let source = fdl_core::vfs::read_to_string(path).unwrap();
+                    for hit in pattern.captures_iter(source.split("#[cfg(test)]").next().unwrap()) { check(&hit[1]); }
+                }
+            }
+        }
+        let pattern = regex::Regex::new(r#"settings::(?:text|label)\("([^"\\]*)""#).unwrap();
+        walk(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &pattern);
+        for item in crate::editor::menus::SLASH_ITEMS { check(item.label); }
+        for item in crate::editor::menus::TURN_ITEMS { check(item.label); check(item.tip); if let Some(md) = item.md { check(md); } }
+        for group in crate::editor::menus::GROUPS { check(group.title); }
+    }
+
+    #[test]
+    fn diagnostics_preserve_paths_and_identifiers() {
+        let source = "无法清理过期回收站文档 我的笔记.xml：Permission denied";
+        assert_eq!(diagnostic_for(source, false), source);
+        assert_eq!(diagnostic_for(source, true), "Could not remove expired Trash document 我的笔记.xml: Permission denied");
+        assert_eq!(diagnostic_for("文档索引已损坏，已从备份恢复（原文件保留为 index.json.bad）", true), "Document index was damaged and restored from backup (original retained as index.json.bad).");
+        assert_eq!(diagnostic_for("unknown OS error", true), "unknown OS error");
+    }
+
+    #[test]
+    fn user_titles_are_never_translation_keys() {
+        for title in ["主页", "收藏", "未命名文档", "My notes", "我的中文笔记"] { assert_eq!(display_title(title), title); }
+    }
+}
+
+#[cfg(test)]
+mod preference_tests {
+    use super::Preferences;
+
+    #[test]
+    fn new_preferences_use_feishu_without_overriding_saved_themes() {
+        assert_eq!(Preferences::default().theme_id(), "feishu");
+        for (json, expected) in [
+            (r#"{}"#, "feishu"),
+            (r#"{"feishu":false}"#, "craft"),
+            (r#"{"feishu":true}"#, "feishu"),
+            (r#"{"theme":"notion","feishu":false}"#, "notion"),
+            (r#"{"theme":"craft","feishu":true}"#, "craft"),
+            (r#"{"theme":"my-theme"}"#, "my-theme"),
+        ] {
+            let saved: Preferences = serde_json::from_str(json).unwrap();
+            assert_eq!(saved.theme_id(), expected);
+            let round_trip: Preferences = serde_json::from_str(&serde_json::to_string(&saved).unwrap()).unwrap();
+            assert_eq!(round_trip.theme_id(), expected);
+        }
+    }
+
+    #[test]
+    fn language_comes_from_older_files_english_switch() {
+        use super::Lang;
+        for (json, expected) in [
+            (r#"{"english":false}"#, Lang::Zh),
+            (r#"{"english":true}"#, Lang::En),
+            (r#"{"english":true,"language":"ko"}"#, Lang::Ko),
+            (r#"{"english":true,"language":"ar"}"#, Lang::Ar),
+            (r#"{"english":true,"language":"xx"}"#, Lang::En),
+        ] {
+            let saved: Preferences = serde_json::from_str(json).unwrap();
+            assert_eq!(saved.lang(), expected, "{json}");
+        }
+        let mut p: Preferences = serde_json::from_str(r#"{"english":false}"#).unwrap();
+        p.set_lang(Lang::Ko);
+        let json = serde_json::to_value(&p).unwrap();
+        assert_eq!((json["language"].as_str(), json["english"].as_bool()), (Some("ko"), Some(true)), "older builds read English");
+        p.set_lang(Lang::Zh);
+        assert!(!p.english);
+    }
+}

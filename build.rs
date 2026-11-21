@@ -1,0 +1,86 @@
+//! Embed the files under assets/ that the app reads into the binary (see
+//! src/assets.rs); SKIP lists the rest.
+
+use std::fmt::Write;
+use std::path::Path;
+
+fn main() {
+    let linux = matches!(std::env::var("CARGO_CFG_TARGET_OS").as_deref(), Ok("linux" | "freebsd"));
+    let web = std::env::var("CARGO_CFG_TARGET_FAMILY").is_ok_and(|f| f.split(',').any(|f| f == "wasm"));
+    let skip: Vec<&str> = SKIP.iter().copied().chain((!linux).then_some("fonts/emoji/")).chain(web.then_some("fonts/excalidraw/Xiaolai-Regular.ttf.zlib")).collect();
+    embed("assets", "assets.rs", &skip);
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") { windows_resources(); }
+}
+
+fn windows_resources() {
+    let root = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let out = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    let icon = root.join("assets/branding/app-icon.ico").to_string_lossy().replace('\\', "/");
+    let version = std::env::var("CARGO_PKG_VERSION").unwrap();
+    let numbers = format!("{},0", version.replace('.', ","));
+    let rc = format!(r#"1 ICON "{icon}"
+1 VERSIONINFO
+FILEVERSION {numbers}
+PRODUCTVERSION {numbers}
+FILEOS 0x40004
+FILETYPE 0x1
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "FileDescription", "Merak\0"
+      VALUE "FileVersion", "{version}\0"
+      VALUE "ProductName", "Merak\0"
+      VALUE "ProductVersion", "{version}\0"
+      VALUE "OriginalFilename", "merak.exe\0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END
+"#);
+    let source = out.join("merak.rc");
+    let resource = out.join("merak.res");
+    std::fs::write(&source, rc).unwrap();
+    let status = std::process::Command::new("rc.exe").arg("/nologo").arg("/fo").arg(&resource).arg(&source).status().expect("Windows SDK rc.exe is required; build from a Visual Studio developer shell");
+    assert!(status.success(), "Windows resource compilation failed");
+    println!("cargo:rustc-link-arg-bin=merak={}", resource.display());
+}
+
+const SKIP: &[&str] = &["themes/"];
+
+fn embed(source: &str, output: &str, skip: &[&str]) {
+    let root = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join(source);
+    if !root.exists() {
+        let dest = Path::new(&std::env::var("OUT_DIR").unwrap()).join(output);
+        std::fs::write(dest, "pub static FILES: &[(&str, &[u8])] = &[];\n").unwrap();
+        return;
+    }
+    println!("cargo:rerun-if-changed={}", root.display());
+    let mut files = vec![];
+    collect(&root, &root, &mut files);
+    files.retain(|(rel, _)| !skip.iter().any(|s| if s.ends_with('/') { rel.starts_with(s) } else { rel == s }));
+    files.sort();
+    let mut out = String::from("pub static FILES: &[(&str, &[u8])] = &[\n");
+    for (rel, abs) in files {
+        writeln!(out, "    ({rel:?}, include_bytes!({abs:?})),").unwrap();
+    }
+    out.push_str("];\n");
+    let dest = Path::new(&std::env::var("OUT_DIR").unwrap()).join(output);
+    std::fs::write(dest, out).unwrap();
+}
+
+fn collect(root: &Path, dir: &Path, out: &mut Vec<(String, String)>) {
+    for e in std::fs::read_dir(dir).unwrap().flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            collect(root, &p, out);
+        } else {
+            let rel = p.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/");
+            out.push((rel, p.to_string_lossy().into_owned()));
+        }
+    }
+}
