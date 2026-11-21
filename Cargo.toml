@@ -93,7 +93,7 @@ codegen-units = 1
 strip = "symbols"
 
 [workspace.lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))', 'cfg(mizar_loom)'] }
 
 [workspace.lints.clippy]
 type_complexity = "allow"
