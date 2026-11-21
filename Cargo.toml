@@ -15,12 +15,14 @@ runtime_shaders = ["gpui_platform/runtime_shaders"]
 devtools = []
 
 # `fdl_core` is the GPUI-free document, whiteboard and table engine;
-# `merak-contracts` holds pure Rust domain contracts and seed data.
+# `cordis` is the hierarchical plugin/Fiber microkernel;
+# `merak-contracts` holds pure Rust domain contracts and seed data;
+# `merak-core` implements Merak domain services and project Fibers atop Cordis.
 [workspace]
-members = ["crates/core", "crates/merak-contracts"]
+members = ["crates/core", "crates/cordis", "crates/merak-contracts", "crates/merak-core"]
 # vendor/zed holds path dependencies with self-contained manifests, not members.
 exclude = ["vendor", "tools/vendor-sync"]
-default-members = [".", "crates/core", "crates/merak-contracts"]
+default-members = [".", "crates/core", "crates/cordis", "crates/merak-contracts", "crates/merak-core"]
 
 [dependencies]
 fdl_core = { path = "crates/core" }
