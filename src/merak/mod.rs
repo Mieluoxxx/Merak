@@ -92,6 +92,7 @@ pub struct MerakWorkspace {
     pub mail_reply_input: Entity<TextField>,
     pub settings_search_input: Entity<TextField>,
     pub git_cache: HashMap<String, GitRepoStatus>,
+    last_core_revision: u64,
     pub toast: Option<(ToastKind, SharedString, Instant)>,
     toast_task: Option<Task<()>>,
     _subs: Vec<Subscription>,
@@ -271,6 +272,14 @@ impl MerakWorkspace {
         let init_in_settings = state.nav == PrimaryNav::Settings;
         let init_settings_section = state.settings_section;
 
+        let git_cache: HashMap<String, GitRepoStatus> = state
+            .core
+            .git_cache()
+            .into_iter()
+            .map(|(k, v)| (k, GitRepoStatus::from(v)))
+            .collect();
+        let last_core_revision = state.core.revision();
+
         let ws = Self {
             state,
             focus: cx.focus_handle(),
@@ -311,7 +320,8 @@ impl MerakWorkspace {
             new_project_repo_probing: false,
             mail_reply_input,
             settings_search_input,
-            git_cache: HashMap::new(),
+            git_cache,
+            last_core_revision,
             toast: None,
             toast_task: None,
             _subs: subs,
@@ -363,6 +373,10 @@ impl MerakWorkspace {
     }
 
     fn sync_and_step_motion(&mut self, window: &mut Window, cx: &App) {
+        let core_rev = self.state.core.revision();
+        if core_rev != self.last_core_revision {
+            self.sync_git_cache();
+        }
         let reduce_motion = cx.reduce_motion();
 
         if self.state.rail != self.last_rail {
@@ -858,6 +872,17 @@ impl MerakWorkspace {
         .detach();
     }
 
+    pub fn sync_git_cache(&mut self) {
+        self.git_cache = self
+            .state
+            .core
+            .git_cache()
+            .into_iter()
+            .map(|(k, v)| (k, GitRepoStatus::from(v)))
+            .collect();
+        self.last_core_revision = self.state.core.revision();
+    }
+
     pub fn probe_new_project_repo(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let raw = self.new_project_repo_input.read(cx).text.trim().to_string();
         if raw.is_empty() {
@@ -914,6 +939,7 @@ impl MerakWorkspace {
                 .create_project(&raw_name, &summary, color, &bot_id, None)
                 .is_some()
             {
+                self.sync_git_cache();
                 window.focus(&self.focus, cx);
                 self.show_toast(
                     ToastKind::Success,
@@ -934,9 +960,10 @@ impl MerakWorkspace {
 
         self.new_project_repo_probing = true;
         cx.notify();
+        let core = self.state.core.clone();
         let task = cx
             .background_executor()
-            .spawn(async move { git_repo::inspect_repo(&raw_repo) });
+            .spawn(async move { GitRepoStatus::from(core.probe_repo(&raw_repo)) });
         cx.spawn_in(window, async move |this, cx| {
             let status = task.await;
             let _ = this.update_in(cx, |ws, window, cx| {
@@ -967,6 +994,7 @@ impl MerakWorkspace {
                     .create_project(&derived_name, &summary, color, &bot_id, Some(root))
                     .is_some()
                 {
+                    ws.sync_git_cache();
                     window.focus(&ws.focus, cx);
                     ws.show_toast(
                         ToastKind::Success,
@@ -1067,11 +1095,12 @@ impl MerakWorkspace {
         if paths.is_empty() {
             return;
         }
+        let core = self.state.core.clone();
         let task = cx.background_executor().spawn(async move {
             paths
                 .into_iter()
                 .map(|p| {
-                    let st = git_repo::inspect_repo(&p);
+                    let st = GitRepoStatus::from(core.refresh_repo(&p));
                     (p, st)
                 })
                 .collect::<Vec<_>>()
@@ -1079,6 +1108,8 @@ impl MerakWorkspace {
         cx.spawn_in(window, async move |this, cx| {
             let results = task.await;
             let _ = this.update_in(cx, |ws, _, cx| {
+                ws.state.sync_from_core();
+                ws.sync_git_cache();
                 for (path, status) in results {
                     ws.git_cache.insert(path, status);
                 }
@@ -1136,9 +1167,10 @@ impl MerakWorkspace {
             return;
         }
         let pid = pid.to_string();
+        let core = self.state.core.clone();
         let task = cx
             .background_executor()
-            .spawn(async move { git_repo::inspect_repo(&clean) });
+            .spawn(async move { GitRepoStatus::from(core.probe_repo(&clean)) });
         cx.spawn_in(window, async move |this, cx| {
             let status = task.await;
             let _ = this.update_in(cx, |ws, window, cx| {
@@ -1160,7 +1192,8 @@ impl MerakWorkspace {
                 let branch = status.branch.clone();
                 match ws.state.bind_project_repo(&pid, root.clone()) {
                     Ok(true) => {
-                        ws.git_cache.insert(root, status);
+                        ws.sync_git_cache();
+                        ws.git_cache.entry(root).or_insert(status);
                         ws.show_toast(
                             ToastKind::Success,
                             format!("已绑定仓库 {name}（分支 {branch}）"),
@@ -1169,6 +1202,7 @@ impl MerakWorkspace {
                         );
                     }
                     Ok(false) => {
+                        ws.sync_git_cache();
                         ws.git_cache.insert(root, status);
                         ws.show_toast(
                             ToastKind::Info,

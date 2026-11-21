@@ -48,7 +48,11 @@ fn flat_section(title: &'static str, rows: Vec<AnyElement>) -> Div {
     sec
 }
 
-fn flat_row(title: &'static str, desc: impl Into<SharedString>, control: AnyElement) -> AnyElement {
+fn flat_row(
+    title: impl Into<SharedString>,
+    desc: impl Into<SharedString>,
+    control: AnyElement,
+) -> AnyElement {
     div()
         .flex()
         .items_center()
@@ -66,7 +70,7 @@ fn flat_row(title: &'static str, desc: impl Into<SharedString>, control: AnyElem
                         .text_size(px(13.5))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(Theme::text())
-                        .child(title),
+                        .child(title.into()),
                 )
                 .child(
                     div()
@@ -689,21 +693,105 @@ pub fn render_settings(ws: &MerakWorkspace, cx: &mut Context<MerakWorkspace>) ->
                 ],
             )]
         }
-        SettingsSection::Daemon => vec![flat_section(
-            "本地守护进程",
+        SettingsSection::Daemon => {
+            let r = &ws.state.runtime_report;
+            let service_pills = if r.active_services.is_empty() {
+                vec![components::subtle_pill("暂无在线服务").into_any_element()]
+            } else {
+                r.active_services
+                    .iter()
+                    .map(|svc| components::subtle_pill(svc.clone()).into_any_element())
+                    .collect()
+            };
+
+            let project_rows: Vec<AnyElement> = if r.projects.is_empty() {
+                vec![flat_row(
+                    "暂无项目 Fiber",
+                    "创建项目后会自动热挂载独立的 Project Fiber 及其子 Git 插件。",
+                    components::subtle_pill("空闲").into_any_element(),
+                )]
+            } else {
+                r.projects
+                    .iter()
+                    .map(|proj| {
+                        let mut pills = div()
+                            .max_w(px(320.))
+                            .flex()
+                            .flex_wrap()
+                            .justify_end()
+                            .gap(px(6.))
+                            .child(components::subtle_pill(proj.state.clone()));
+                        if proj.git_fibers.is_empty() {
+                            pills = pills.child(components::subtle_pill("无 Git 子插件"));
+                        } else {
+                            for gf in &proj.git_fibers {
+                                let branch = gf
+                                    .branch
+                                    .as_deref()
+                                    .unwrap_or(if gf.is_git { "HEAD" } else { "非Git" });
+                                pills = pills.child(components::subtle_pill(format!(
+                                    "git:{} ({branch})",
+                                    gf.repo_name
+                                )));
+                            }
+                        }
+                        flat_row(
+                            proj.project_name.clone(),
+                            format!(
+                                "Fiber #{} · project:{} · {} 个子插件",
+                                proj.fiber_uid,
+                                proj.project_id,
+                                proj.git_fibers.len()
+                            ),
+                            pills.into_any_element(),
+                        )
+                    })
+                    .collect()
+            };
+
             vec![
-                flat_row(
-                    "当前运行模式",
-                    "Phase 0 UI 原型期采用本地状态机驱动，后续可平滑切换为常驻 Tokio Daemon。",
-                    components::subtle_pill("单进程 Mock 框架").into_any_element(),
+                flat_section(
+                    "Cordis 微内核运行时",
+                    vec![
+                        flat_row(
+                            "运行模式",
+                            "领域服务与 Project/Git Fiber 树由隔离的 Cordis 微内核驱动，与 GPUI 主线程零锁隔离。",
+                            components::subtle_pill("Cordis 微内核 · merak-core").into_any_element(),
+                        ),
+                        flat_row(
+                            "在线服务与 Fiber 总览",
+                            "实时统计已挂载就绪的领域服务数量与 Fiber 树活跃节点比例。",
+                            components::subtle_pill(format!(
+                                "{} 服务 · {}/{} 活跃 Fiber",
+                                r.active_services.len(),
+                                r.active_fibers,
+                                r.total_fibers
+                            ))
+                            .into_any_element(),
+                        ),
+                        flat_row(
+                            "逆序清理计数 (Cleanup)",
+                            "解绑仓库或销毁项目 Fiber 时由 Cordis 按挂载逆序自动触发的 Cleanup 累计次数。",
+                            components::subtle_pill(format!("{} 次", r.cleanup_count))
+                                .into_any_element(),
+                        ),
+                        flat_row(
+                            "在线服务列表",
+                            "当前已在 Cordis Context 中完成依赖注入并处于活跃状态的领域服务。",
+                            div()
+                                .max_w(px(320.))
+                                .flex()
+                                .flex_wrap()
+                                .justify_end()
+                                .gap(px(6.))
+                                .children(service_pills)
+                                .into_any_element(),
+                        ),
+                    ],
                 ),
-                flat_row(
-                    "契约层",
-                    "UI 状态与事件流统一定义在纯粹无副作用的 Rust 契约包中。",
-                    components::subtle_pill("merak-contracts").into_any_element(),
-                ),
-            ],
-        )],
+                flat_section("Project Fiber 树（热挂载 / 级联卸载）", project_rows),
+            ]
+        }
         SettingsSection::GitWorktree => vec![flat_section(
             "分支与隔离",
             vec![

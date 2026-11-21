@@ -20,7 +20,7 @@ Merak 是一个以项目与视觉产物为核心的原生桌面工作台，采�
 - **Verify 双轨验收**：将「机器自证（Machine Self-Proof）」与「人类裁决（Human Verdict）」明确拆分——测试命令、输出日志与已知 Gap 一目了然，由人直接给出 Pass / Reject 裁决或 Gap 豁免决定。
 - **Linus 风格应用内邮箱（Inbox）**：全局低噪音裁决队列，主从分栏呈现提案邮件、白板方案附件与自证报告，支持原地选型拍板、行内回复与 `J` / `K` / `E` 键盘流处理。
 - **原生设置中心与双主题**：平铺分节设计、搜索过滤与完整浅色 / 深色主题支持。
-- **纯 Rust + GPUI 原生架构**：界面渲染与核心域逻辑严格分层，详见 [`docs/core-vs-app-boundaries.md`](docs/core-vs-app-boundaries.md)。
+- **纯 Rust + GPUI + Cordis 微内核架构**：由 `crates/cordis` 与 `crates/merak-core` 在隔离运行时中承载领域服务与 Project/Git Fiber 树，界面渲染与核心域逻辑严格分层，详见 [`docs/core-vs-app-boundaries.md`](docs/core-vs-app-boundaries.md)。
 
 ## 快速开始
 
@@ -28,8 +28,8 @@ Merak 是一个以项目与视觉产物为核心的原生桌面工作台，采�
 # 运行 Merak 桌面端
 cargo run
 
-# 运行纯 Rust 领域契约测试
-cargo test -p merak-contracts
+# 运行 Cordis 微内核、领域契约与核心服务测试
+cargo test -p cordis -p merak-contracts -p merak-core
 
 # 全目标静态检查（含离屏截图与自动化 devtools 特性）
 cargo check --all-targets --features devtools

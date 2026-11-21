@@ -27,6 +27,7 @@ default-members = [".", "crates/core", "crates/cordis", "crates/merak-contracts"
 [dependencies]
 fdl_core = { path = "crates/core" }
 merak-contracts = { path = "crates/merak-contracts" }
+merak-core = { path = "crates/merak-core" }
 anyhow = "1.0.104"
 async-lock = "3.4"
 dirs = "7.0.0"

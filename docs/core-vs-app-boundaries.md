@@ -63,17 +63,19 @@ flowchart TD
 
 ```text
 Merak/
-├─ Cargo.toml                     # Workspace root: merak (GPUI bin) + fdl_core + merak-contracts
+├─ Cargo.toml                     # Workspace root: merak (GPUI bin) + fdl_core + cordis + merak-contracts + merak-core
 ├─ rust-toolchain.toml            # Pinned Rust toolchain (1.99.0)
 ├─ docs/
 │  └─ core-vs-app-boundaries.md   # 本文档：纯 Rust + GPUI 架构与边界契约
 ├─ crates/
+│  ├─ cordis/                     # cordis: 层次化 Context/Fiber 插件微内核、Effect 清理、DI 与 5 种事件流
 │  ├─ core/                       # fdl_core: GPUI-free 文档 / Excalidraw 白板 / SQLite 数据表引擎
-│  └─ merak-contracts/            # 纯 Rust 领域契约（Project / Bot / Task / Inbox）与 Mock Seed
+│  ├─ merak-contracts/            # 纯 Rust 领域契约（Project / Bot / Task / Inbox）与 Mock Seed
+│  └─ merak-core/                 # 基于 Cordis 的 Merak 领域微内核（8 大服务 + Project/Git Fiber 树 + MerakCoreHandle）
 ├─ src/
 │  ├─ main.rs                     # GPUI 入口、字体/快捷键/主题加载与窗口管理
 │  ├─ app.rs                      # Merak 原生菜单与工作台全局快捷键 Actions
-│  ├─ merak/                      # Merak GPUI 工作台外壳（Inbox / Tasks / Bots / Split Pane / Overlays）
+│  ├─ merak/                      # Merak GPUI 工作台外壳（通过 MerakCoreHandle 桥接 merak-core，绝不直引 cordis/tokio）
 │  ├─ editor/                     # 块编辑器 GPUI 视图（复用 fdl_core::editor）
 │  ├─ board/                      # Excalidraw + vello_cpu 原生画板视图
 │  ├─ table/                      # SQLite 多维数据表 GPUI 视图
@@ -88,9 +90,9 @@ Merak/
 
 ## 五、分阶段落地路线
 
-- **Phase 0（当前阶段）：纯 Rust + GPUI 工作台外壳（Mock Seed）**
+- **Phase 0（已完成）：纯 Rust + GPUI 工作台外壳**
   - 完成 Electron 卸载，立足 `quiet-md` GPUI 基座搭好 Inbox + Tasks + Bots + 右侧上下文 Split Pane，并在同一窗口直接嵌入真实的 `Editor`、`BoardView`（Excalidraw）与 `TableView`（SQLite）。
-- **Phase 1：`merak-daemon` 接入 `mizar` 微内核**
-  - 引入同级 `../mizar/crates/*`，搭建 Tokio 守护进程（`mizar-agent-spine` + SQLite EventSink + Outbox），让 Inbox 审批和 Bot 流式对话驱动真实的 Suspend/Resume。
-- **Phase 2：`rquickjs` 自扩展 Mod 宿主 + `merak-app` 控制面**
-  - 复用 Mizar 的 `rquickjs 0.14` 向 GPUI 暴露声明式卡片与 Pane 注入原语，搭配 `Window::render_offscreen` 完成 Herdr 式自动改 UI + 截图验收闭环。
+- **Phase 1（当前阶段）：`cordis` + `merak-core` 微内核桥接**
+  - 引入 `crates/cordis`（Context/Fiber 生命周期、Effect 逆序清理、DI 与 5 种事件模式）与 `crates/merak-core`（8 大领域服务与按项目热挂载/级联卸载的 Project + Git Fiber 树），通过隔离 `"merak-cordis-rt"` Tokio 运行时的 `MerakCoreHandle` 为 GPUI 提供非阻塞同步/异步桥接，`src/` 全域保持零 `cordis::` / `tokio::` 依赖。
+- **Phase 2：`merak-daemon` 常驻化、`rquickjs` 自扩展 Mod 宿主与控制面**
+  - 接入 `mizar` 能力并持久化 Event Sourcing / SQLite Outbox，复用 `rquickjs` 向 GPUI 暴露声明式卡片与 Pane 注入原语，搭配 `Window::render_offscreen` 完成自动改 UI + 截图验收闭环。
