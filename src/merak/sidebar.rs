@@ -570,34 +570,10 @@ pub fn render_sidebar(ws: &MerakWorkspace, cx: &mut Context<MerakWorkspace>) -> 
             .child(
                 div()
                     .px(px(10.))
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(
-                        div()
-                            .text_size(px(11.5))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(components::sidebar_muted())
-                            .child(section_title),
-                    )
-                    .when(rail == RailSection::Projects, |d| {
-                        d.child(
-                            div()
-                                .id("sidebar-new-project-icon")
-                                .size(px(22.))
-                                .rounded(px(6.))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .cursor_pointer()
-                                .hover(|s| s.bg(Theme::fill_hover()))
-                                .tip("新建项目", Some("⌘⇧N"))
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.open_new_project_modal(window, cx);
-                                }))
-                                .child(ui::icon("plus", 12., components::sidebar_muted())),
-                        )
-                    }),
+                    .text_size(px(11.5))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(components::sidebar_muted())
+                    .child(section_title),
             )
             .child(animated_section_list)
             .when(rail == RailSection::Projects, |d| {
