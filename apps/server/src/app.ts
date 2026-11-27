@@ -4,8 +4,17 @@ import { API_ROUTES } from "@merak/shared";
 import { MERAK_ARTIFACT_CSS, MERAK_ARTIFACT_JS, UI_SDK_MANIFEST } from "@merak/ui/artifact";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { sqlite } from "./db/client.js";
+import { ZodError } from "zod";
+import { auth, type AuthInstance, type MerakDb } from "./auth/index.js";
+import { db, sqlite } from "./db/client.js";
 import { env } from "./env.js";
+import {
+  mountCoreRoutes,
+  type MountCoreRoutesOptions,
+  type MountedCoreRoutes,
+} from "./routes/index.js";
+import { HttpError } from "./services/errors.js";
+import { createServices, type CreatedAppServices } from "./services/index.js";
 
 const require = createRequire(import.meta.url);
 let cachedUiSdkWebCss: string | null = null;
@@ -18,8 +27,28 @@ function getUiSdkWebCss(): string {
   return cachedUiSdkWebCss;
 }
 
-export function createApp(): Hono {
+export interface CreateAppOptions {
+  services?: CreatedAppServices;
+  auth?: AuthInstance;
+  db?: MerakDb;
+  sqlite?: typeof sqlite;
+  enableWs?: boolean;
+}
+
+export { mountCoreRoutes, type MountCoreRoutesOptions, type MountedCoreRoutes };
+
+export function createApp(options?: CreateAppOptions): Hono {
   const app = new Hono();
+  const sqliteInstance = options?.sqlite ?? sqlite;
+  const dbInstance = options?.db ?? db;
+  const authInstance = options?.auth ?? auth;
+  const services =
+    options?.services ??
+    createServices({
+      db: dbInstance,
+      sqlite: sqliteInstance,
+      mediaDir: env.MEDIA_DIR,
+    });
 
   app.use(
     "/api/*",
@@ -34,12 +63,32 @@ export function createApp(): Hono {
   app.use("/ui-sdk/*", cors({ origin: "*" }));
 
   app.onError((err, c) => {
+    if (err instanceof HttpError) {
+      return c.json(
+        {
+          error: err.message,
+          ...(err.code ? { code: err.code } : {}),
+          ...(err.details !== undefined ? { details: err.details } : {}),
+        },
+        err.status,
+      );
+    }
+    if (err instanceof ZodError) {
+      return c.json(
+        {
+          error: "Validation failed",
+          code: "VALIDATION_ERROR",
+          details: err.issues,
+        },
+        400,
+      );
+    }
     console.error("[merak:server] unhandled error:", err);
     return c.json({ error: err.message || "Internal Server Error" }, 500);
   });
 
   app.get(API_ROUTES.health, (c) => {
-    const row = sqlite.prepare("SELECT 1 AS ok").get() as { ok: number } | undefined;
+    const row = sqliteInstance.prepare("SELECT 1 AS ok").get() as { ok: number } | undefined;
     return c.json({
       ok: row?.ok === 1,
       db: "sqlite",
@@ -73,8 +122,14 @@ export function createApp(): Hono {
     return c.json(UI_SDK_MANIFEST);
   });
 
+  mountCoreRoutes(app, services, {
+    auth: authInstance,
+    db: dbInstance,
+    broadcaster: services.broadcaster,
+    enableWs: options?.enableWs,
+  });
+
   // Wave 1 extension points:
-  // - Worker #1: mount Better Auth (/api/auth/*), Spaces/Nodes/Search/Media/McpTokens routes, and /ws
   // - Worker #2: mount Streamable HTTP MCP server (/mcp)
 
   return app;
