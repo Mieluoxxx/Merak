@@ -1,3 +1,4 @@
+import type { SpaceVisibility } from "@merak/shared";
 import { and, asc, eq } from "drizzle-orm";
 import type { Context, MiddlewareHandler } from "hono";
 import * as schema from "../db/schema.js";
@@ -25,6 +26,16 @@ export function canAccessSpace(ctx: AuthContext, spaceId: string): boolean {
     return true;
   }
   return ctx.tokenScopes.spaceIds.includes(spaceId);
+}
+
+export function canViewSpace(
+  ctx: AuthContext,
+  space: { visibility: SpaceVisibility; ownerUserId: string | null },
+): boolean {
+  if (space.visibility === "shared") {
+    return true;
+  }
+  return space.ownerUserId === ctx.userId;
 }
 
 export function requireSpaceAccess(ctx: AuthContext, spaceId: string): void {

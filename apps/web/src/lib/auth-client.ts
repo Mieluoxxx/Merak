@@ -31,12 +31,6 @@ export interface SignUpEmailParams {
   password: string;
 }
 
-export interface CreateOrganizationParams {
-  name: string;
-  slug: string;
-  logo?: string;
-}
-
 export interface InviteMemberParams {
   email: string;
   role: OrganizationMemberRole;
@@ -84,24 +78,12 @@ export async function signOut() {
   return result.data;
 }
 
-export async function createOrganization(params: CreateOrganizationParams) {
-  const result = await authClient.organization.create({
-    name: params.name,
-    slug: params.slug,
-    logo: params.logo,
-  });
-  if (result.error) {
-    throw new Error(extractAuthError(result.error, "Failed to create team"));
-  }
-  return result.data;
-}
-
 export async function setActiveOrganization(organizationId: string | null) {
   const result = await authClient.organization.setActive({
     organizationId,
   });
   if (result.error) {
-    throw new Error(extractAuthError(result.error, "Failed to switch active team"));
+    throw new Error(extractAuthError(result.error, "Failed to switch active workspace"));
   }
   return result.data;
 }
@@ -116,13 +98,4 @@ export async function inviteOrganizationMember(params: InviteMemberParams) {
     throw new Error(extractAuthError(result.error, "Failed to send invitation"));
   }
   return result.data;
-}
-
-export function slugifyOrganizationName(name: string): string {
-  return name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64);
 }

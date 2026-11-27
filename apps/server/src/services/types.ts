@@ -12,7 +12,7 @@ import type {
   PatchDocInput,
   SearchResultDto,
   SpaceDto,
-  SpaceKind,
+  SpaceVisibility,
   UpdateNodeInput,
   UpdateSpaceInput,
   WsServerEvent,
@@ -30,7 +30,7 @@ export interface AuthContext {
 }
 
 export interface SpaceService {
-  listSpaces(ctx: AuthContext, kind?: SpaceKind): Promise<SpaceDto[]>;
+  listSpaces(ctx: AuthContext, visibility?: SpaceVisibility): Promise<SpaceDto[]>;
   getSpace(ctx: AuthContext, spaceId: string): Promise<SpaceDto | null>;
   createSpace(ctx: AuthContext, input: CreateSpaceInput): Promise<SpaceDto>;
   updateSpace(ctx: AuthContext, spaceId: string, input: UpdateSpaceInput): Promise<SpaceDto>;

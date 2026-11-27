@@ -1,16 +1,4 @@
 import {
-  Button,
-  Dialog,
-  DialogBackdrop,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-  Field,
-  FieldDescription,
-  FieldLabel,
-  Inline,
-  Input,
   Menu,
   MenuContent,
   MenuGroup,
@@ -19,20 +7,17 @@ import {
   MenuItemIcon,
   MenuSeparator,
   MenuTrigger,
-  Stack,
   toast,
 } from "@merak/ui";
-import { colors, font, radius, space } from "@merak/ui/tokens.stylex";
+import { colors, font, space } from "@merak/ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import { useQueryClient } from "@tanstack/react-query";
-import { Building2, Check, ChevronsUpDown, LogOut, Plus, UserPlus } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { Building2, Check, ChevronsUpDown, LogOut, UserPlus } from "lucide-react";
+import { useState } from "react";
 import {
-  createOrganization,
   extractAuthError,
   setActiveOrganization,
   signOut,
-  slugifyOrganizationName,
   useActiveOrganization,
   useListOrganizations,
   useSession,
@@ -133,27 +118,6 @@ const styles = stylex.create({
     width: "100%",
     gap: space.sm,
   },
-  dialogContent: {
-    width: "100%",
-    maxWidth: "420px",
-  },
-  form: {
-    display: "flex",
-    flexDirection: "column",
-    gap: space.md,
-    marginTop: space.md,
-  },
-  errorBanner: {
-    paddingBlock: space.sm,
-    paddingInline: space.md,
-    borderRadius: radius.md,
-    backgroundColor: "rgba(220, 38, 38, 0.1)",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: colors.danger,
-    color: colors.danger,
-    fontSize: font.sizeSm,
-  },
 });
 
 export function TeamSwitcher({ onOrganizationChanged, onSignedOut }: TeamSwitcherProps) {
@@ -162,13 +126,7 @@ export function TeamSwitcher({ onOrganizationChanged, onSignedOut }: TeamSwitche
   const activeOrg = useActiveOrganization();
   const orgsQuery = useListOrganizations();
 
-  const [createOpen, setCreateOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [teamName, setTeamName] = useState("");
-  const [teamSlug, setTeamSlug] = useState("");
-  const [slugTouched, setSlugTouched] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
 
   const organizations = orgsQuery.data ?? [];
   const currentOrg = activeOrg.data ?? organizations[0] ?? null;
@@ -182,47 +140,9 @@ export function TeamSwitcher({ onOrganizationChanged, onSignedOut }: TeamSwitche
       await queryClient.invalidateQueries();
       onOrganizationChanged?.(orgId);
       const target = organizations.find((item) => item.id === orgId);
-      toast.success(`Switched to ${target?.name ?? "team"}`);
+      toast.success(`Switched to ${target?.name ?? "workspace"}`);
     } catch (err) {
-      toast.error(extractAuthError(err, "Could not switch team"));
-    }
-  };
-
-  const handleCreateOrganization = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setCreateError(null);
-
-    const trimmedName = teamName.trim();
-    const resolvedSlug = (slugTouched ? teamSlug : slugifyOrganizationName(trimmedName)).trim();
-    if (!trimmedName) {
-      setCreateError("Team name is required.");
-      return;
-    }
-    if (!resolvedSlug || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(resolvedSlug)) {
-      setCreateError("Slug must use lowercase letters, numbers, and hyphens.");
-      return;
-    }
-
-    setIsCreating(true);
-    try {
-      const created = await createOrganization({
-        name: trimmedName,
-        slug: resolvedSlug,
-      });
-      if (created?.id) {
-        await setActiveOrganization(created.id);
-        await queryClient.invalidateQueries();
-        onOrganizationChanged?.(created.id);
-      }
-      toast.success(`Created team "${trimmedName}"`);
-      setTeamName("");
-      setTeamSlug("");
-      setSlugTouched(false);
-      setCreateOpen(false);
-    } catch (err) {
-      setCreateError(extractAuthError(err, "Failed to create team"));
-    } finally {
-      setIsCreating(false);
+      toast.error(extractAuthError(err, "Could not switch workspace"));
     }
   };
 
@@ -239,7 +159,7 @@ export function TeamSwitcher({ onOrganizationChanged, onSignedOut }: TeamSwitche
   return (
     <>
       <Menu>
-        <MenuTrigger aria-label="Switch workspace team" {...stylex.props(styles.trigger)}>
+        <MenuTrigger aria-label="Workspace menu" {...stylex.props(styles.trigger)}>
           <span {...stylex.props(styles.orgIdentity)}>
             <span {...stylex.props(styles.orgAvatar)}>{initials}</span>
             <span {...stylex.props(styles.orgNameWrap)}>
@@ -255,50 +175,35 @@ export function TeamSwitcher({ onOrganizationChanged, onSignedOut }: TeamSwitche
         </MenuTrigger>
 
         <MenuContent align="start" sideOffset={6} {...stylex.props(styles.menuContent)}>
-          <MenuGroup>
-            <MenuGroupLabel>Teams</MenuGroupLabel>
-            {organizations.length > 0 ? (
-              organizations.map((org) => {
-                const isActive = org.id === currentOrg?.id;
-                return (
-                  <MenuItem
-                    key={org.id}
-                    value={`org:${org.id}`}
-                    onSelect={() => {
-                      void handleSwitchOrganization(org.id);
-                    }}
-                  >
-                    <MenuItemIcon>
-                      <Building2 size={14} />
-                    </MenuItemIcon>
-                    <span {...stylex.props(styles.itemRow)}>
-                      <span>{org.name}</span>
-                      {isActive ? <Check size={14} /> : null}
-                    </span>
-                  </MenuItem>
-                );
-              })
-            ) : (
-              <MenuItem value="org:empty" disabled>
-                No teams loaded
-              </MenuItem>
-            )}
-          </MenuGroup>
+          {organizations.length > 1 ? (
+            <>
+              <MenuGroup>
+                <MenuGroupLabel>Workspaces</MenuGroupLabel>
+                {organizations.map((org) => {
+                  const isActive = org.id === currentOrg?.id;
+                  return (
+                    <MenuItem
+                      key={org.id}
+                      value={`org:${org.id}`}
+                      onSelect={() => {
+                        void handleSwitchOrganization(org.id);
+                      }}
+                    >
+                      <MenuItemIcon>
+                        <Building2 size={14} />
+                      </MenuItemIcon>
+                      <span {...stylex.props(styles.itemRow)}>
+                        <span>{org.name}</span>
+                        {isActive ? <Check size={14} /> : null}
+                      </span>
+                    </MenuItem>
+                  );
+                })}
+              </MenuGroup>
 
-          <MenuSeparator />
-
-          <MenuItem
-            value="action:create-team"
-            onSelect={() => {
-              setCreateError(null);
-              setCreateOpen(true);
-            }}
-          >
-            <MenuItemIcon>
-              <Plus size={14} />
-            </MenuItemIcon>
-            <span>Create Team</span>
-          </MenuItem>
+              <MenuSeparator />
+            </>
+          ) : null}
 
           <MenuItem
             value="action:invite-member"
@@ -308,7 +213,7 @@ export function TeamSwitcher({ onOrganizationChanged, onSignedOut }: TeamSwitche
             <MenuItemIcon>
               <UserPlus size={14} />
             </MenuItemIcon>
-            <span>Invite Teammates</span>
+            <span>Invite Collaborators</span>
           </MenuItem>
 
           {session.data?.user ? (
@@ -330,64 +235,6 @@ export function TeamSwitcher({ onOrganizationChanged, onSignedOut }: TeamSwitche
           ) : null}
         </MenuContent>
       </Menu>
-
-      <Dialog open={createOpen} onOpenChange={(nextOpen) => setCreateOpen(nextOpen)}>
-        <DialogBackdrop />
-        <DialogContent {...stylex.props(styles.dialogContent)}>
-          <DialogTitle>Create Team</DialogTitle>
-          <DialogDescription>
-            Create a shared team workspace for collaborative spaces, documents, and MCP agents.
-          </DialogDescription>
-
-          <form onSubmit={handleCreateOrganization} {...stylex.props(styles.form)} noValidate>
-            <Stack gap="md">
-              <Field name="team-name">
-                <FieldLabel>Team Name</FieldLabel>
-                <Input
-                  placeholder="Platform Engineering"
-                  value={teamName}
-                  onValueChange={(val) => {
-                    setTeamName(val);
-                    if (!slugTouched) {
-                      setTeamSlug(slugifyOrganizationName(val));
-                    }
-                  }}
-                  required
-                />
-              </Field>
-
-              <Field name="team-slug">
-                <FieldLabel>URL Slug</FieldLabel>
-                <Input
-                  placeholder="platform-engineering"
-                  value={teamSlug}
-                  onValueChange={(val) => {
-                    setSlugTouched(true);
-                    setTeamSlug(val);
-                  }}
-                  required
-                />
-                <FieldDescription>
-                  Lowercase letters, numbers, and hyphens only.
-                </FieldDescription>
-              </Field>
-
-              {createError ? (
-                <div role="alert" {...stylex.props(styles.errorBanner)}>
-                  {createError}
-                </div>
-              ) : null}
-
-              <Inline justify="end" gap="sm">
-                <DialogClose disabled={isCreating}>Cancel</DialogClose>
-                <Button type="submit" data-variant="solid" disabled={isCreating}>
-                  {isCreating ? "Creating..." : "Create Team"}
-                </Button>
-              </Inline>
-            </Stack>
-          </form>
-        </DialogContent>
-      </Dialog>
 
       <InviteMemberDialog
         open={inviteOpen}

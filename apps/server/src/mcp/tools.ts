@@ -6,7 +6,7 @@ import {
   rankAfter,
   rankBefore,
   rankBetween,
-  spaceKindSchema,
+  spaceVisibilitySchema,
   type NodeDetailDto,
   type NodeTreeItemDto,
 } from "@merak/shared";
@@ -385,11 +385,13 @@ export function registerMcpTools(
   server.registerTool(
     "list_spaces",
     {
-      title: "List Spaces",
+      title: "List Projects",
       description:
-        'List accessible Knowledge Base ("knowledge") and Project ("project") spaces within the token scope.',
+        'List accessible Shared ("shared") and Private ("private") projects within the token scope.',
       inputSchema: {
-        kind: spaceKindSchema.optional().describe('Optional filter by space kind ("knowledge" or "project").'),
+        visibility: spaceVisibilitySchema
+          .optional()
+          .describe('Optional filter by project visibility ("shared" or "private").'),
       },
       annotations: {
         readOnlyHint: true,
@@ -397,9 +399,9 @@ export function registerMcpTools(
         idempotentHint: true,
       },
     },
-    async ({ kind }) =>
+    async ({ visibility }) =>
       runTool(async () => {
-        const allSpaces = await services.spaces.listSpaces(ctx, kind);
+        const allSpaces = await services.spaces.listSpaces(ctx, visibility);
         const spaces = filterSpacesByScope(ctx, allSpaces);
         return { spaces };
       }),

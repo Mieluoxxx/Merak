@@ -11,14 +11,15 @@ import {
   type NodeTreeItemDto,
   type SearchResultDto,
   type SpaceDto,
-  type SpaceKind,
+  type SpaceVisibility,
   type UpdateNodeInput,
   type UpdateSpaceInput,
 } from "@merak/shared";
 import { apiFetch } from "../../lib/api.js";
 
 export const workspaceQueryKeys = {
-  spaces: (kind?: SpaceKind) => (kind ? (["spaces", kind] as const) : (["spaces"] as const)),
+  spaces: (visibility?: SpaceVisibility) =>
+    visibility ? (["spaces", visibility] as const) : (["spaces"] as const),
   tree: (spaceId: string) => ["tree", spaceId] as const,
   node: (nodeId: string) => ["node", nodeId] as const,
   media: (filter?: { spaceId?: string | null; orphansOnly?: boolean }) => {
@@ -31,9 +32,9 @@ export const workspaceQueryKeys = {
   mcpTokens: () => ["mcp-tokens"] as const,
 } as const;
 
-export function buildSpacesUrl(kind?: SpaceKind): string {
-  if (!kind) return API_ROUTES.spaces;
-  const params = new URLSearchParams({ kind });
+export function buildSpacesUrl(visibility?: SpaceVisibility): string {
+  if (!visibility) return API_ROUTES.spaces;
+  const params = new URLSearchParams({ visibility });
   return `${API_ROUTES.spaces}?${params.toString()}`;
 }
 
@@ -73,9 +74,9 @@ export function shortHash(sha256: string, length = 8): string {
   return sha256.slice(0, length);
 }
 
-// Spaces
-export async function fetchSpaces(kind?: SpaceKind): Promise<SpaceDto[]> {
-  return apiFetch<SpaceDto[]>(buildSpacesUrl(kind));
+// Projects (Spaces)
+export async function fetchSpaces(visibility?: SpaceVisibility): Promise<SpaceDto[]> {
+  return apiFetch<SpaceDto[]>(buildSpacesUrl(visibility));
 }
 
 export async function createSpace(input: CreateSpaceInput): Promise<SpaceDto> {

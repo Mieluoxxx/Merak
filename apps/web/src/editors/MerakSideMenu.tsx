@@ -48,10 +48,16 @@ import {
   getBlockTypeLabel,
 } from "./blockMetrics.js";
 import { cloneBlocksForDuplicate, resolveBlockMenuShortcut } from "./blockSelection.js";
+import {
+  formatBlockEquationMarkdown,
+  replaceInlineEquationsWithPlaceholders,
+  restoreInlineMathInMarkdown,
+} from "./mathHelpers.js";
 
 const NON_CONVERTIBLE_BLOCK_TYPES = new Set([
   "merakChild",
   "merakEmbed",
+  "merakBlockEquation",
   "divider",
   "image",
   "video",
@@ -183,8 +189,6 @@ const styles = stylex.create({
     },
     color: colors.textMuted,
     cursor: "pointer",
-    transitionProperty: "background-color, color",
-    transitionDuration: "120ms",
   },
   dragTrigger: {
     display: "inline-flex",
@@ -206,8 +210,6 @@ const styles = stylex.create({
     },
     color: colors.textMuted,
     cursor: "grab",
-    transitionProperty: "background-color, color",
-    transitionDuration: "120ms",
   },
   dragTriggerActive: {
     backgroundColor: colors.bgHover,
@@ -625,7 +627,18 @@ export function MerakSideMenu({ onActiveBlockChange }: MerakSideMenuProps) {
     const current = editor.getBlock(targetBlockId);
     if (!current) return;
     try {
-      const md = editor.blocksToMarkdownLossy([current]);
+      let md: string;
+      if ((current.type as string) === "merakBlockEquation") {
+        const currentProps = current.props as Record<string, unknown> | undefined;
+        const latex = typeof currentProps?.latex === "string" ? currentProps.latex : "";
+        md = formatBlockEquationMarkdown(latex);
+      } else {
+        const { blocks: prepared, equations } = replaceInlineEquationsWithPlaceholders([current]);
+        md = restoreInlineMathInMarkdown(
+          editor.blocksToMarkdownLossy(prepared as Parameters<typeof editor.blocksToMarkdownLossy>[0]),
+          equations,
+        );
+      }
       await navigator.clipboard.writeText(md);
       toast.success("Copied block Markdown");
     } catch {
@@ -1123,6 +1136,7 @@ export function MerakSideMenu({ onActiveBlockChange }: MerakSideMenuProps) {
 
                 {openSubmenu && canConvert ? (
                   <div
+                    data-merak-submenu-side={submenuFlipLeft ? "left" : "right"}
                     style={{ top: submenuTop }}
                     onMouseEnter={cancelSubmenuClose}
                     onMouseLeave={scheduleSubmenuClose}

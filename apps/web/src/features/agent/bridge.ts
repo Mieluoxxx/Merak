@@ -20,7 +20,7 @@ export interface MerakWorkbenchStateSnapshot {
   commandPaletteOpen: boolean;
   realtimeState: WsConnectionState;
   hasConflict: boolean;
-  spaces: Array<{ id: string; name: string; kind: "knowledge" | "project" }>;
+  spaces: Array<{ id: string; name: string; visibility: "shared" | "private" }>;
 }
 
 export interface MerakAgentBridgeHandlers {

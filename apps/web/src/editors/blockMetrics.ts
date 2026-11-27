@@ -27,6 +27,7 @@ const BLOCK_TYPE_LABELS: Record<string, string> = {
   checkListItem: "To-do list",
   quote: "Quote",
   codeBlock: "Code",
+  merakBlockEquation: "Equation",
   divider: "Divider",
   toggleListItem: "Toggle list",
   table: "Table",
@@ -55,7 +56,12 @@ function extractInlineText(nodes: unknown): string {
   for (const node of nodes) {
     if (!node || typeof node !== "object") continue;
     const item = node as Record<string, unknown>;
-    if (typeof item.text === "string") {
+    if (item.type === "merakEquation") {
+      const props = (item.props ?? {}) as Record<string, unknown>;
+      if (typeof props.latex === "string" && props.latex.length > 0) {
+        out += props.latex;
+      }
+    } else if (typeof item.text === "string") {
       out += item.text;
     } else if (Array.isArray(item.content)) {
       out += extractInlineText(item.content);
@@ -86,6 +92,8 @@ function extractTableText(content: Record<string, unknown>): string {
 }
 
 export interface BlockTextLike {
+  type?: string;
+  props?: Record<string, unknown>;
   content?: unknown;
   children?: readonly BlockTextLike[];
 }
@@ -93,7 +101,10 @@ export interface BlockTextLike {
 export function extractBlockPlainText(block: BlockTextLike): string {
   const parts: string[] = [];
 
-  if (Array.isArray(block.content)) {
+  if (block.type === "merakBlockEquation") {
+    const latex = typeof block.props?.latex === "string" ? block.props.latex.trim() : "";
+    if (latex) parts.push(latex);
+  } else if (Array.isArray(block.content)) {
     const inline = extractInlineText(block.content);
     if (inline) parts.push(inline);
   } else if (block.content && typeof block.content === "object") {

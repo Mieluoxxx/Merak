@@ -112,8 +112,12 @@ export function createSearchService(
       }
 
       const limit = Math.min(Math.max(Math.trunc(opts?.limit ?? 20), 1), 100);
-      const conditions: string[] = ["nodes_fts MATCH ?", "org_id = ?"];
-      const params: Array<string | number> = [ftsQuery, ctx.orgId];
+      const conditions: string[] = [
+        "nodes_fts MATCH ?",
+        "org_id = ?",
+        "space_id IN (SELECT id FROM spaces WHERE org_id = ? AND (visibility = 'shared' OR owner_user_id = ?))",
+      ];
+      const params: Array<string | number> = [ftsQuery, ctx.orgId, ctx.orgId, ctx.userId];
 
       if (opts?.spaceId) {
         conditions.push("space_id = ?");

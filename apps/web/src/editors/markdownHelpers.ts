@@ -18,12 +18,18 @@ export interface MerakEmbedDirective {
   height: number;
 }
 
+export interface MerakEquationDirective {
+  kind: "equation";
+  latex: string;
+}
+
 export type MerakDirective = MerakChildDirective | MerakEmbedDirective;
 
 export type MarkdownSegment =
   | { kind: "markdown"; markdown: string }
   | MerakChildDirective
-  | MerakEmbedDirective;
+  | MerakEmbedDirective
+  | MerakEquationDirective;
 
 function escapeAttrValue(value: string): string {
   return value
@@ -112,9 +118,9 @@ export function parseMerakDirective(line: string): MerakDirective | null {
 }
 
 /**
- * Splits a Markdown document into standard Markdown chunks and Merak directive
- * blocks (`::child{...}` / `::embed{...}`), ignoring directives inside fenced
- * code blocks.
+ * Splits a Markdown document into standard Markdown chunks, Merak directive
+ * blocks (`::child{...}` / `::embed{...}`), and display math blocks (`$$...$$`),
+ * ignoring directives inside fenced code blocks.
  */
 export function splitMarkdownWithDirectives(markdown: string): MarkdownSegment[] {
   if (!markdown) return [];
@@ -124,6 +130,7 @@ export function splitMarkdownWithDirectives(markdown: string): MarkdownSegment[]
   const segments: MarkdownSegment[] = [];
   let buffer: string[] = [];
   let activeFence: { marker: "`" | "~"; length: number } | null = null;
+  let mathBuffer: string[] | null = null;
 
   const flushBuffer = () => {
     const text = buffer.join("\n").trim();
@@ -134,6 +141,19 @@ export function splitMarkdownWithDirectives(markdown: string): MarkdownSegment[]
   };
 
   for (const line of lines) {
+    if (mathBuffer !== null) {
+      if (line.trim() === "$$") {
+        segments.push({
+          kind: "equation",
+          latex: mathBuffer.join("\n").trim(),
+        });
+        mathBuffer = null;
+      } else {
+        mathBuffer.push(line);
+      }
+      continue;
+    }
+
     const fenceMatch = /^\s*(`{3,}|~{3,})/.exec(line);
     if (fenceMatch && fenceMatch[1]) {
       const seq = fenceMatch[1];
@@ -148,6 +168,23 @@ export function splitMarkdownWithDirectives(markdown: string): MarkdownSegment[]
     }
 
     if (!activeFence) {
+      const trimmed = line.trim();
+      if (trimmed === "$$") {
+        flushBuffer();
+        mathBuffer = [];
+        continue;
+      }
+
+      const singleLineMath = /^\$\$(.+)\$\$$/.exec(trimmed);
+      if (singleLineMath && singleLineMath[1] !== undefined && !singleLineMath[1].includes("$$")) {
+        flushBuffer();
+        segments.push({
+          kind: "equation",
+          latex: singleLineMath[1].trim(),
+        });
+        continue;
+      }
+
       const directive = parseMerakDirective(line);
       if (directive) {
         flushBuffer();
@@ -157,6 +194,10 @@ export function splitMarkdownWithDirectives(markdown: string): MarkdownSegment[]
     }
 
     buffer.push(line);
+  }
+
+  if (mathBuffer !== null) {
+    buffer.push("$$", ...mathBuffer);
   }
 
   flushBuffer();
@@ -173,7 +214,7 @@ export function joinMarkdownSegments(parts: readonly string[]): string {
 export function extractDocExcerpt(markdown: string, maxLength = 240): string {
   const cleaned = markdown
     .split(/\r?\n/)
-    .filter((line) => !parseMerakDirective(line))
+    .filter((line) => !parseMerakDirective(line) && line.trim() !== "$$")
     .map((line) => line.replace(/^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+)/, ""))
     .join(" ")
     .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")

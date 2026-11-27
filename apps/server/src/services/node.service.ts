@@ -12,6 +12,7 @@ import { nanoid } from "nanoid";
 import type { MerakDb } from "../auth/index.js";
 import {
   canAccessSpace,
+  canViewSpace,
   requireSpaceAccess,
   requireWritePermission,
 } from "../auth/middleware.js";
@@ -96,8 +97,8 @@ export function createNodeService(deps: NodeServiceDeps): NodeService {
       .limit(1);
 
     const space = rows[0];
-    if (!space) {
-      throw new NotFoundError("Space not found");
+    if (!space || !canViewSpace(ctx, space)) {
+      throw new NotFoundError("Project not found");
     }
     requireSpaceAccess(ctx, space.id);
     return space;
@@ -121,7 +122,7 @@ export function createNodeService(deps: NodeServiceDeps): NodeService {
       .limit(1);
 
     const record = rows[0];
-    if (!record) return null;
+    if (!record || !canViewSpace(ctx, record.space)) return null;
     if (!opts?.includeDeleted && record.node.deletedAt !== null) {
       return null;
     }
@@ -771,7 +772,7 @@ export function createNodeService(deps: NodeServiceDeps): NodeService {
       }
 
       const rows = await db
-        .select({ node: schema.nodes })
+        .select({ node: schema.nodes, space: schema.spaces })
         .from(schema.nodes)
         .innerJoin(schema.spaces, eq(schema.nodes.spaceId, schema.spaces.id))
         .where(
@@ -789,7 +790,7 @@ export function createNodeService(deps: NodeServiceDeps): NodeService {
         .orderBy(desc(schema.nodes.deletedAt));
 
       return rows
-        .filter((r) => canAccessSpace(ctx, r.node.spaceId))
+        .filter((r) => canAccessSpace(ctx, r.node.spaceId) && canViewSpace(ctx, r.space))
         .map((r) => toNodeDetailDto(r.node, false));
     },
   };

@@ -1,4 +1,4 @@
-import type { NodeDetailDto, NodeType, SpaceDto, SpaceKind } from "@merak/shared";
+import type { NodeDetailDto, NodeType, SpaceDto, SpaceVisibility } from "@merak/shared";
 import {
   Button,
   Collapsible,
@@ -20,6 +20,7 @@ import {
   MenuGroupLabel,
   MenuItem,
   MenuItemIcon,
+  MenuSeparator,
   MenuTrigger,
   ScrollArea,
   ScrollAreaContent,
@@ -39,13 +40,13 @@ import * as stylex from "@stylexjs/stylex";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Blocks,
-  BookOpen,
   ChevronRight,
   FileText,
   Folder,
-  FolderGit2,
+  Globe,
   Image as ImageIcon,
   KeyRound,
+  Lock,
   Network,
   PenTool,
   Plus,
@@ -56,6 +57,7 @@ import type { WorkbenchView } from "../features/agent/bridge.js";
 import {
   createNode,
   createSpace,
+  updateSpace,
   workspaceQueryKeys,
 } from "../features/api/workspace-api.js";
 import { TeamSwitcher } from "../features/auth/TeamSwitcher.js";
@@ -365,18 +367,18 @@ export function Sidebar({
   const queryClient = useQueryClient();
   const shortcutHint = useShortcutHint("mod+k");
 
-  const knowledgeSpaces = useMemo(
-    () => spaces.filter((item) => item.kind === "knowledge"),
+  const sharedSpaces = useMemo(
+    () => spaces.filter((item) => item.visibility === "shared"),
     [spaces],
   );
-  const projectSpaces = useMemo(
-    () => spaces.filter((item) => item.kind === "project"),
+  const privateSpaces = useMemo(
+    () => spaces.filter((item) => item.visibility === "private"),
     [spaces],
   );
 
   const [openSpaceIds, setOpenSpaceIds] = useState<Record<string, boolean>>({});
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
-  const [newSpaceKind, setNewSpaceKind] = useState<SpaceKind>("knowledge");
+  const [newSpaceVisibility, setNewSpaceVisibility] = useState<SpaceVisibility>("private");
   const [newSpaceName, setNewSpaceName] = useState("");
   const [newSpaceDesc, setNewSpaceDesc] = useState("");
   const [createSpaceError, setCreateSpaceError] = useState<string | null>(null);
@@ -399,10 +401,24 @@ export function Sidebar({
       setCreateSpaceOpen(false);
       onSpaceCreated?.(created);
       onSelectSpace(created.id);
-      toast.success(`Created space "${created.name}"`);
+      toast.success(`Created project "${created.name}"`);
     },
     onError: (err) => {
-      setCreateSpaceError(err instanceof Error ? err.message : "Failed to create space");
+      setCreateSpaceError(err instanceof Error ? err.message : "Failed to create project");
+    },
+  });
+
+  const updateSpaceVisibilityMutation = useMutation({
+    mutationFn: ({ spaceId, visibility }: { spaceId: string; visibility: SpaceVisibility }) =>
+      updateSpace(spaceId, { visibility }),
+    onSuccess: async (updated) => {
+      await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.spaces() });
+      toast.success(
+        `Moved "${updated.name}" to ${updated.visibility === "shared" ? "Shared" : "Private"}`,
+      );
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Failed to move project");
     },
   });
 
@@ -422,8 +438,8 @@ export function Sidebar({
     },
   });
 
-  const openCreateSpaceDialog = (kind: SpaceKind) => {
-    setNewSpaceKind(kind);
+  const openCreateSpaceDialog = (visibility: SpaceVisibility) => {
+    setNewSpaceVisibility(visibility);
     setCreateSpaceError(null);
     setCreateSpaceOpen(true);
   };
@@ -433,26 +449,26 @@ export function Sidebar({
     setCreateSpaceError(null);
     const trimmedName = newSpaceName.trim();
     if (!trimmedName) {
-      setCreateSpaceError("Space name is required.");
+      setCreateSpaceError("Project name is required.");
       return;
     }
     createSpaceMutation.mutate({
-      kind: newSpaceKind,
+      visibility: newSpaceVisibility,
       name: trimmedName,
       description: newSpaceDesc.trim() || null,
     });
   };
 
-  const renderSpaceGroup = (label: string, kind: SpaceKind, list: SpaceDto[]) => {
-    const Icon = kind === "knowledge" ? BookOpen : FolderGit2;
+  const renderSpaceGroup = (label: string, visibility: SpaceVisibility, list: SpaceDto[]) => {
+    const Icon = visibility === "shared" ? Globe : Lock;
     return (
       <div {...stylex.props(styles.section)}>
         <div {...stylex.props(styles.sectionHeader)}>
           <span {...stylex.props(styles.sectionLabel)}>{label}</span>
           <button
             type="button"
-            aria-label={`New ${label} space`}
-            onClick={() => openCreateSpaceDialog(kind)}
+            aria-label={`New ${label.toLowerCase()} project`}
+            onClick={() => openCreateSpaceDialog(visibility)}
             {...stylex.props(styles.sectionAddButton)}
           >
             <Plus size={13} />
@@ -461,7 +477,7 @@ export function Sidebar({
 
         {list.length === 0 ? (
           <div {...stylex.props(styles.emptySpaces)}>
-            {kind === "project" ? "No projects yet" : "No knowledge spaces yet"}
+            {visibility === "shared" ? "No shared projects yet" : "No private projects yet"}
           </div>
         ) : (
           list.map((spaceItem) => {
@@ -556,6 +572,29 @@ export function Sidebar({
                           </MenuItem>
                         ))}
                       </MenuGroup>
+                      <MenuSeparator />
+                      <MenuItem
+                        value={`space-visibility:${spaceItem.id}`}
+                        onSelect={() =>
+                          updateSpaceVisibilityMutation.mutate({
+                            spaceId: spaceItem.id,
+                            visibility: spaceItem.visibility === "shared" ? "private" : "shared",
+                          })
+                        }
+                      >
+                        <MenuItemIcon>
+                          {spaceItem.visibility === "shared" ? (
+                            <Lock size={13} />
+                          ) : (
+                            <Globe size={13} />
+                          )}
+                        </MenuItemIcon>
+                        <span>
+                          {spaceItem.visibility === "shared"
+                            ? "Move to Private"
+                            : "Move to Shared"}
+                        </span>
+                      </MenuItem>
                     </MenuContent>
                   </Menu>
                 </div>
@@ -609,8 +648,8 @@ export function Sidebar({
       <ScrollArea {...stylex.props(styles.scrollRoot)}>
         <ScrollAreaViewport {...stylex.props(styles.scrollViewport)}>
           <ScrollAreaContent {...stylex.props(styles.scrollContent)}>
-            {renderSpaceGroup("Knowledge Base", "knowledge", knowledgeSpaces)}
-            {renderSpaceGroup("Projects", "project", projectSpaces)}
+            {renderSpaceGroup("Shared", "shared", sharedSpaces)}
+            {renderSpaceGroup("Private", "private", privateSpaces)}
           </ScrollAreaContent>
         </ScrollAreaViewport>
         <ScrollAreaScrollbar orientation="vertical">
@@ -647,33 +686,33 @@ export function Sidebar({
       <Dialog open={createSpaceOpen} onOpenChange={(nextOpen) => setCreateSpaceOpen(nextOpen)}>
         <DialogBackdrop />
         <DialogContent {...stylex.props(styles.dialogContent)}>
-          <DialogTitle>Create Space</DialogTitle>
+          <DialogTitle>Create Project</DialogTitle>
           <DialogDescription>
-            Organize long-lived docs in a Knowledge Base or time-bounded deliverables in a Project.
+            Keep personal notes in Private or collaborate with teammates in a Shared project.
           </DialogDescription>
 
           <form onSubmit={handleCreateSpaceSubmit} {...stylex.props(styles.form)} noValidate>
             <Stack gap="md">
-              <Field name="space-kind">
-                <FieldLabel>Space Kind</FieldLabel>
-                <SegmentedControl<SpaceKind>
-                  value={newSpaceKind}
+              <Field name="space-visibility">
+                <FieldLabel>Visibility</FieldLabel>
+                <SegmentedControl<SpaceVisibility>
+                  value={newSpaceVisibility}
                   onValueChange={(next) => {
-                    if (next === "knowledge" || next === "project") {
-                      setNewSpaceKind(next);
+                    if (next === "shared" || next === "private") {
+                      setNewSpaceVisibility(next);
                     }
                   }}
                 >
                   <SegmentedControlIndicator />
-                  <SegmentedControlItem value="knowledge">Knowledge Base</SegmentedControlItem>
-                  <SegmentedControlItem value="project">Project</SegmentedControlItem>
+                  <SegmentedControlItem value="shared">Shared</SegmentedControlItem>
+                  <SegmentedControlItem value="private">Private</SegmentedControlItem>
                 </SegmentedControl>
               </Field>
 
               <Field name="space-name">
-                <FieldLabel>Space Name</FieldLabel>
+                <FieldLabel>Project Name</FieldLabel>
                 <Input
-                  placeholder={newSpaceKind === "knowledge" ? "Engineering Wiki" : "Q3 Launch"}
+                  placeholder={newSpaceVisibility === "shared" ? "Engineering Wiki" : "Personal Notes"}
                   value={newSpaceName}
                   onValueChange={(val) => setNewSpaceName(val)}
                   autoFocus
@@ -684,7 +723,7 @@ export function Sidebar({
               <Field name="space-description">
                 <FieldLabel>Description (optional)</FieldLabel>
                 <Textarea
-                  placeholder="Short summary of what lives in this space..."
+                  placeholder="Short summary of what lives in this project..."
                   value={newSpaceDesc}
                   onValueChange={(val) => setNewSpaceDesc(val)}
                   rows={2}
@@ -704,7 +743,7 @@ export function Sidebar({
                   data-variant="solid"
                   disabled={createSpaceMutation.isPending}
                 >
-                  {createSpaceMutation.isPending ? "Creating..." : "Create Space"}
+                  {createSpaceMutation.isPending ? "Creating..." : "Create Project"}
                 </Button>
               </Inline>
             </Stack>

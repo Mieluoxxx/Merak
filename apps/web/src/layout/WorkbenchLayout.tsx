@@ -274,7 +274,7 @@ export function WorkbenchLayout({
         commandPaletteOpen: commandOpen,
         realtimeState: realtime.connectionState,
         hasConflict: realtime.conflictEvent !== null,
-        spaces: spaces.map((s) => ({ id: s.id, name: s.name, kind: s.kind })),
+        spaces: spaces.map((s) => ({ id: s.id, name: s.name, visibility: s.visibility })),
       }),
       navigateNode: (nodeId, spaceId) => selectNode(nodeId, spaceId),
       switchSpace: (spaceId) => {

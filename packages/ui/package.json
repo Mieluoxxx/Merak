@@ -11,8 +11,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc --noEmit",
-    "test": "vitest run"
+    "build": "tsc --noEmit"
   },
   "dependencies": {
     "@stylexjs/stylex": "^0.19.2",

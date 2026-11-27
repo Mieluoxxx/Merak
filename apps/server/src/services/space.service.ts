@@ -2,7 +2,7 @@ import {
   type CreateSpaceInput,
   rankAfter,
   type SpaceDto,
-  type SpaceKind,
+  type SpaceVisibility,
   type UpdateSpaceInput,
 } from "@merak/shared";
 import { and, asc, desc, eq } from "drizzle-orm";
@@ -10,6 +10,7 @@ import { nanoid } from "nanoid";
 import type { MerakDb } from "../auth/index.js";
 import {
   canAccessSpace,
+  canViewSpace,
   requireSpaceAccess,
   requireWritePermission,
 } from "../auth/middleware.js";
@@ -28,7 +29,8 @@ function toSpaceDto(row: SpaceRow): SpaceDto {
   return {
     id: row.id,
     orgId: row.orgId,
-    kind: row.kind,
+    visibility: row.visibility,
+    ownerUserId: row.ownerUserId,
     slug: row.slug,
     name: row.name,
     icon: row.icon,
@@ -45,7 +47,7 @@ function slugifyName(name: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 64);
-  return slug || "space";
+  return slug || "project";
 }
 
 export interface SpaceServiceDeps {
@@ -58,19 +60,19 @@ export function createSpaceService(deps: SpaceServiceDeps): SpaceService {
   const { db, search, realtime } = deps;
 
   return {
-    async listSpaces(ctx: AuthContext, kind?: SpaceKind): Promise<SpaceDto[]> {
+    async listSpaces(ctx: AuthContext, visibility?: SpaceVisibility): Promise<SpaceDto[]> {
       const rows = await db
         .select()
         .from(schema.spaces)
         .where(
-          kind
-            ? and(eq(schema.spaces.orgId, ctx.orgId), eq(schema.spaces.kind, kind))
+          visibility
+            ? and(eq(schema.spaces.orgId, ctx.orgId), eq(schema.spaces.visibility, visibility))
             : eq(schema.spaces.orgId, ctx.orgId),
         )
         .orderBy(asc(schema.spaces.sortOrder), asc(schema.spaces.createdAt));
 
       return rows
-        .filter((row) => canAccessSpace(ctx, row.id))
+        .filter((row) => canAccessSpace(ctx, row.id) && canViewSpace(ctx, row))
         .map(toSpaceDto);
     },
 
@@ -84,7 +86,7 @@ export function createSpaceService(deps: SpaceServiceDeps): SpaceService {
         .limit(1);
 
       const row = rows[0];
-      if (!row) return null;
+      if (!row || !canViewSpace(ctx, row)) return null;
 
       requireSpaceAccess(ctx, row.id);
       return toSpaceDto(row);
@@ -100,7 +102,7 @@ export function createSpaceService(deps: SpaceServiceDeps): SpaceService {
         ctx.tokenScopes &&
         ctx.tokenScopes.spaceIds !== "*"
       ) {
-        throw new ForbiddenError("Space-scoped token cannot create spaces");
+        throw new ForbiddenError("Space-scoped token cannot create projects");
       }
 
       const explicitSlug = input.slug?.trim();
@@ -116,7 +118,7 @@ export function createSpaceService(deps: SpaceServiceDeps): SpaceService {
 
       if (existing.length > 0) {
         if (explicitSlug) {
-          throw new ConflictError(`Space with slug "${slug}" already exists`);
+          throw new ConflictError(`Project with slug "${slug}" already exists`);
         }
         slug = `${slug}-${nanoid(5).toLowerCase()}`;
       }
@@ -127,7 +129,7 @@ export function createSpaceService(deps: SpaceServiceDeps): SpaceService {
         .where(
           and(
             eq(schema.spaces.orgId, ctx.orgId),
-            eq(schema.spaces.kind, input.kind),
+            eq(schema.spaces.visibility, input.visibility),
           ),
         )
         .orderBy(desc(schema.spaces.sortOrder))
@@ -138,7 +140,8 @@ export function createSpaceService(deps: SpaceServiceDeps): SpaceService {
       const row: SpaceRow = {
         id: `spc_${nanoid(16)}`,
         orgId: ctx.orgId,
-        kind: input.kind,
+        visibility: input.visibility,
+        ownerUserId: input.visibility === "private" ? ctx.userId : null,
         slug,
         name: input.name,
         icon: input.icon ?? null,
@@ -177,12 +180,22 @@ export function createSpaceService(deps: SpaceServiceDeps): SpaceService {
         .limit(1);
 
       const existing = rows[0];
-      if (!existing) {
-        throw new NotFoundError("Space not found");
+      if (!existing || !canViewSpace(ctx, existing)) {
+        throw new NotFoundError("Project not found");
       }
+
+      const nextVisibility = input.visibility ?? existing.visibility;
+      const nextOwnerUserId =
+        input.visibility !== undefined
+          ? input.visibility === "private"
+            ? ctx.userId
+            : null
+          : existing.ownerUserId;
 
       const updated: SpaceRow = {
         ...existing,
+        visibility: nextVisibility,
+        ownerUserId: nextOwnerUserId,
         name: input.name ?? existing.name,
         icon: input.icon !== undefined ? input.icon : existing.icon,
         description:
@@ -194,6 +207,8 @@ export function createSpaceService(deps: SpaceServiceDeps): SpaceService {
       await db
         .update(schema.spaces)
         .set({
+          visibility: updated.visibility,
+          ownerUserId: updated.ownerUserId,
           name: updated.name,
           icon: updated.icon,
           description: updated.description,
@@ -219,15 +234,16 @@ export function createSpaceService(deps: SpaceServiceDeps): SpaceService {
       requireSpaceAccess(ctx, spaceId);
 
       const rows = await db
-        .select({ id: schema.spaces.id })
+        .select()
         .from(schema.spaces)
         .where(
           and(eq(schema.spaces.id, spaceId), eq(schema.spaces.orgId, ctx.orgId)),
         )
         .limit(1);
 
-      if (rows.length === 0) {
-        throw new NotFoundError("Space not found");
+      const existing = rows[0];
+      if (!existing || !canViewSpace(ctx, existing)) {
+        throw new NotFoundError("Project not found");
       }
 
       const nodeRows = await db

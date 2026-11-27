@@ -441,7 +441,7 @@ export function CommandPalette({
                 ? "Searching FTS5 index..."
                 : debouncedQuery
                   ? `${results.length} ${results.length === 1 ? "result" : "results"}`
-                  : "Type to search across all spaces"}
+                  : "Type to search across all projects"}
             </span>
             <span>Enter to select · ↑↓ to navigate</span>
           </CommandStatus>

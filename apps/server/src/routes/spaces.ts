@@ -1,7 +1,7 @@
 import {
   API_ROUTES,
   createSpaceInputSchema,
-  spaceKindSchema,
+  spaceVisibilitySchema,
   updateSpaceInputSchema,
 } from "@merak/shared";
 import type { Hono } from "hono";
@@ -16,17 +16,17 @@ export function mountSpaceRoutes(
 ): void {
   app.get(API_ROUTES.spaces, async (c) => {
     const ctx = getAuthContext(c);
-    const rawKind = c.req.query("kind");
-    let kind: "knowledge" | "project" | undefined;
-    if (rawKind !== undefined && rawKind !== "") {
-      const parsed = spaceKindSchema.safeParse(rawKind);
+    const rawVisibility = c.req.query("visibility");
+    let visibility: "shared" | "private" | undefined;
+    if (rawVisibility !== undefined && rawVisibility !== "") {
+      const parsed = spaceVisibilitySchema.safeParse(rawVisibility);
       if (!parsed.success) {
-        throw new BadRequestError("Invalid space kind", parsed.error.issues);
+        throw new BadRequestError("Invalid project visibility", parsed.error.issues);
       }
-      kind = parsed.data;
+      visibility = parsed.data;
     }
 
-    const spaces = await services.spaces.listSpaces(ctx, kind);
+    const spaces = await services.spaces.listSpaces(ctx, visibility);
     return c.json(spaces);
   });
 

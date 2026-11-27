@@ -113,7 +113,12 @@ export const spaces = sqliteTable(
     orgId: text("org_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    kind: text("kind", { enum: ["knowledge", "project"] }).notNull(),
+    visibility: text("visibility", { enum: ["shared", "private"] })
+      .notNull()
+      .default("private"),
+    ownerUserId: text("owner_user_id").references(() => user.id, {
+      onDelete: "cascade",
+    }),
     slug: text("slug").notNull(),
     name: text("name").notNull(),
     icon: text("icon"),
@@ -128,7 +133,7 @@ export const spaces = sqliteTable(
   },
   (table) => [
     uniqueIndex("spaces_org_slug_idx").on(table.orgId, table.slug),
-    index("spaces_org_kind_idx").on(table.orgId, table.kind, table.sortOrder),
+    index("spaces_org_visibility_idx").on(table.orgId, table.visibility, table.sortOrder),
   ],
 );
 

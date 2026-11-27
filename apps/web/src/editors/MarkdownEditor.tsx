@@ -3,6 +3,7 @@ import { BlockNoteView } from "@blocknote/ariakit";
 import {
   BlockNoteSchema,
   defaultBlockSpecs,
+  defaultInlineContentSpecs,
   filterSuggestionItems,
   insertOrUpdateBlockForSlashMenu,
 } from "@blocknote/core";
@@ -71,6 +72,8 @@ import {
   Network,
   PenTool,
   Quote,
+  Radical,
+  Sigma,
   Sparkles,
   Trash2,
   Type,
@@ -78,6 +81,7 @@ import {
 } from "lucide-react";
 import {
   createContext,
+  type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useContext,
   useEffect,
@@ -85,7 +89,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { countWordsAndChars, extractBlocksPlainText } from "./blockMetrics.js";
+import { countWordsAndChars, extractBlockPlainText, extractBlocksPlainText } from "./blockMetrics.js";
 import { cloneBlocksForDuplicate } from "./blockSelection.js";
 import {
   DocAppearancePopover,
@@ -94,6 +98,12 @@ import {
   type DocAppearanceSettings,
 } from "./DocAppearancePopover.js";
 import { createMerakCodeBlockSpec } from "./MerakCodeBlock.js";
+import {
+  createMerakBlockEquationSpec,
+  createMerakInlineEquationSpec,
+  markBlockEquationAutoOpen,
+  markNextInlineEquationAutoOpen,
+} from "./MerakEquation.js";
 import { createMerakCodeHighlighter } from "./codeHighlighter.js";
 import { MerakFilePanel } from "./MerakFilePanel.js";
 import { MerakSideMenu } from "./MerakSideMenu.js";
@@ -114,6 +124,14 @@ import {
   joinMarkdownSegments,
   splitMarkdownWithDirectives,
 } from "./markdownHelpers.js";
+import {
+  extractInlineMathPlaceholders,
+  findInlineMathMatchInText,
+  formatBlockEquationMarkdown,
+  hydrateInlineEquationPlaceholders,
+  replaceInlineEquationsWithPlaceholders,
+  restoreInlineMathInMarkdown,
+} from "./mathHelpers.js";
 import { formatMediaUrl, isNodeType, NODE_TYPE_META, useGlobalSaveShortcut } from "./shared.js";
 import { useBlockMarqueeSelection } from "./useBlockMarqueeSelection.js";
 
@@ -704,8 +722,13 @@ const merakMarkdownSchema = BlockNoteSchema.create({
   blockSpecs: {
     ...defaultBlockSpecs,
     codeBlock: createMerakCodeBlockSpec(),
+    merakBlockEquation: createMerakBlockEquationSpec(),
     merakChild: createMerakChildBlock(),
     merakEmbed: createMerakEmbedBlock(),
+  },
+  inlineContentSpecs: {
+    ...defaultInlineContentSpecs,
+    merakEquation: createMerakInlineEquationSpec(),
   },
 });
 
@@ -721,7 +744,11 @@ function serializeEditorToMerakMarkdown(
 
   const flushStandardGroup = () => {
     if (standardGroup.length === 0) return;
-    const md = editor.blocksToMarkdownLossy(standardGroup);
+    const { blocks: prepared, equations } = replaceInlineEquationsWithPlaceholders(standardGroup);
+    const md = restoreInlineMathInMarkdown(
+      editor.blocksToMarkdownLossy(prepared as typeof editor.document),
+      equations,
+    );
     if (md.trim().length > 0) {
       parts.push(md.trim());
     }
@@ -749,6 +776,12 @@ function serializeEditorToMerakMarkdown(
             height: clampEmbedHeight(block.props.height),
           }),
         );
+      }
+    } else if (block.type === "merakBlockEquation") {
+      flushStandardGroup();
+      const formatted = formatBlockEquationMarkdown(block.props.latex);
+      if (formatted) {
+        parts.push(formatted);
       }
     } else {
       standardGroup.push(block);
@@ -787,9 +820,17 @@ function parseMerakMarkdownToBlocks(
           height: String(segment.height),
         },
       });
+    } else if (segment.kind === "equation") {
+      blocks.push({
+        type: "merakBlockEquation",
+        props: {
+          latex: segment.latex,
+        },
+      });
     } else {
-      const parsed = editor.tryParseMarkdownToBlocks(segment.markdown);
-      blocks.push(...parsed);
+      const { markdown: extracted, equations } = extractInlineMathPlaceholders(segment.markdown);
+      const parsed = editor.tryParseMarkdownToBlocks(extracted);
+      blocks.push(...hydrateInlineEquationPlaceholders(parsed, equations));
     }
   }
 
@@ -828,6 +869,7 @@ export function MarkdownEditor({
   onCreateChildRef.current = onCreateChild;
 
   const isHydratingRef = useRef(false);
+  const isAutoConvertingMathRef = useRef(false);
   const hydratedNodeIdRef = useRef<string | null>(null);
   const lastEmittedMarkdownRef = useRef<string>(node.content);
   const editorScrollRef = useRef<HTMLDivElement>(null);
@@ -882,12 +924,104 @@ export function MarkdownEditor({
 
   const handleEditorChange = useCallback(() => {
     if (isHydratingRef.current || readOnly) return;
+
+    if (!isAutoConvertingMathRef.current) {
+      const cursor = editor.getTextCursorPosition();
+      const cursorBlock = cursor?.block;
+      if (
+        cursorBlock &&
+        cursorBlock.type !== "codeBlock" &&
+        cursorBlock.type !== "merakBlockEquation" &&
+        Array.isArray(cursorBlock.content)
+      ) {
+        let converted = false;
+        const nextContent: unknown[] = [];
+        for (const item of cursorBlock.content) {
+          if (
+            !converted &&
+            item &&
+            typeof item === "object" &&
+            (item as { type?: unknown }).type === "text" &&
+            typeof (item as { text?: unknown }).text === "string"
+          ) {
+            const textItem = item as { type: "text"; text: string; styles?: Record<string, unknown> };
+            const match = findInlineMathMatchInText(textItem.text);
+            if (match) {
+              const before = textItem.text.slice(0, match.start);
+              const after = textItem.text.slice(match.end);
+              const styles = textItem.styles ?? {};
+              if (before.length > 0) {
+                nextContent.push({ type: "text", text: before, styles });
+              }
+              nextContent.push({
+                type: "merakEquation",
+                props: { latex: match.latex },
+              });
+              if (after.length > 0) {
+                nextContent.push({ type: "text", text: after, styles });
+              }
+              converted = true;
+              continue;
+            }
+          }
+          nextContent.push(item);
+        }
+
+        if (converted) {
+          isAutoConvertingMathRef.current = true;
+          try {
+            editor.updateBlock(cursorBlock.id, {
+              content: nextContent as Parameters<typeof editor.updateBlock>[1]["content"],
+            });
+            queueMicrotask(() => {
+              isAutoConvertingMathRef.current = false;
+              try {
+                editor.setTextCursorPosition(cursorBlock.id, "end");
+                editor.focus();
+              } catch {
+                // Ignore if block was removed before microtask runs.
+              }
+            });
+          } catch {
+            isAutoConvertingMathRef.current = false;
+          }
+        }
+      }
+    }
+
     const nextMarkdown = serializeEditorToMerakMarkdown(editor);
     if (nextMarkdown !== lastEmittedMarkdownRef.current) {
       lastEmittedMarkdownRef.current = nextMarkdown;
       onChangeRef.current(nextMarkdown);
     }
   }, [editor, readOnly]);
+
+  const handleEditorKeyDownCapture = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (readOnly || event.nativeEvent.isComposing) return;
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-merak-equation-popover="true"], [data-merak-code-lang-popover="true"]')) {
+        return;
+      }
+      const cursor = editor.getTextCursorPosition();
+      const block = cursor?.block;
+      if (!block || block.type !== "paragraph") return;
+      if (extractBlockPlainText(block).trim() !== "$$") return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      markBlockEquationAutoOpen(block.id);
+      const replaced = editor.replaceBlocks([block.id], [
+        { id: block.id, type: "merakBlockEquation", props: { latex: "" } },
+      ]);
+      const inserted = replaced.insertedBlocks[0];
+      if (inserted?.id) {
+        markBlockEquationAutoOpen(inserted.id);
+      }
+    },
+    [editor, readOnly],
+  );
 
   const handleSave = useCallback(async () => {
     if (!onSaveRef.current || readOnly) return;
@@ -1053,6 +1187,36 @@ export function MarkdownEditor({
             setEmbedDialogOpen(true);
           },
         },
+        {
+          title: "Block equation",
+          subtext: "Display a standalone LaTeX equation block ($$)",
+          aliases: ["equation", "math", "latex", "tex", "formula", "block equation", "公式", "公式区块"],
+          group: "Math",
+          icon: <Sigma size={16} />,
+          onItemClick: () => {
+            const inserted = insertOrUpdateBlockForSlashMenu(editor, {
+              type: "merakBlockEquation",
+              props: { latex: "" },
+            });
+            if (inserted?.id) {
+              markBlockEquationAutoOpen(inserted.id);
+            }
+          },
+        },
+        {
+          title: "Inline equation",
+          subtext: "Insert an inline LaTeX math expression ($...$)",
+          aliases: ["inline equation", "inline math", "math", "equation", "latex", "tex", "formula", "行内公式"],
+          group: "Math",
+          icon: <Radical size={16} />,
+          onItemClick: () => {
+            markNextInlineEquationAutoOpen();
+            editor.insertInlineContent([
+              { type: "merakEquation", props: { latex: "" } },
+              " ",
+            ]);
+          },
+        },
       ];
 
       return filterSuggestionItems([...merakItems, ...defaultItems], query);
@@ -1202,6 +1366,7 @@ export function MarkdownEditor({
           data-merak-doc-full={docAppearance.fullWidth ? "true" : undefined}
           data-marquee-dragging={marquee.isDragging ? "true" : undefined}
           onPointerDown={marquee.handlePointerDown}
+          onKeyDownCapture={handleEditorKeyDownCapture}
           {...stylex.props(styles.editorScroll)}
         >
           <BlockNoteView

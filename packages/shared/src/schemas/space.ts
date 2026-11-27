@@ -1,12 +1,13 @@
 import { z } from "zod";
 
-export const spaceKindSchema = z.enum(["knowledge", "project"]);
-export type SpaceKind = z.infer<typeof spaceKindSchema>;
+export const spaceVisibilitySchema = z.enum(["shared", "private"]);
+export type SpaceVisibility = z.infer<typeof spaceVisibilitySchema>;
 
 export const spaceDtoSchema = z.object({
   id: z.string(),
   orgId: z.string(),
-  kind: spaceKindSchema,
+  visibility: spaceVisibilitySchema,
+  ownerUserId: z.string().nullable(),
   slug: z.string(),
   name: z.string(),
   icon: z.string().nullable(),
@@ -18,7 +19,7 @@ export const spaceDtoSchema = z.object({
 export type SpaceDto = z.infer<typeof spaceDtoSchema>;
 
 export const createSpaceInputSchema = z.object({
-  kind: spaceKindSchema,
+  visibility: spaceVisibilitySchema.default("private"),
   name: z.string().trim().min(1).max(120),
   slug: z
     .string()
@@ -33,6 +34,7 @@ export const createSpaceInputSchema = z.object({
 export type CreateSpaceInput = z.infer<typeof createSpaceInputSchema>;
 
 export const updateSpaceInputSchema = z.object({
+  visibility: spaceVisibilitySchema.optional(),
   name: z.string().trim().min(1).max(120).optional(),
   icon: z.string().trim().max(64).nullable().optional(),
   description: z.string().trim().max(500).nullable().optional(),

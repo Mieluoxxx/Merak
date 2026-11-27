@@ -537,7 +537,7 @@ export function McpTokensPanel({ spaces: providedSpaces }: McpTokensPanelProps) 
                 <div {...stylex.props(styles.spacePicker)}>
                   {spaces.length === 0 ? (
                     <span {...stylex.props(styles.tokenDates)}>
-                      No spaces available yet. Create a space first or select All Spaces.
+                      No projects available yet. Create a project first or select All Projects.
                     </span>
                   ) : (
                     spaces.map((item) => {
@@ -550,7 +550,9 @@ export function McpTokensPanel({ spaces: providedSpaces }: McpTokensPanelProps) 
                             onChange={() => toggleSpaceSelection(item.id)}
                           />
                           <span>{item.name}</span>
-                          <Badge tone="neutral">{item.kind}</Badge>
+                          <Badge tone="neutral">
+                            {item.visibility === "shared" ? "Shared" : "Private"}
+                          </Badge>
                         </label>
                       );
                     })
