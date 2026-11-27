@@ -1,0 +1,58 @@
+@layer reset, thirdparty, stylex;
+
+:root {
+  color-scheme: light dark;
+  --merak-scrollbar-track: light-dark(#f1f1ef, #1b1c1f);
+  --merak-scrollbar-thumb: light-dark(#b7b7b2, #4d515b);
+  scrollbar-color: var(--merak-scrollbar-thumb) var(--merak-scrollbar-track);
+}
+
+@supports not (scrollbar-color: auto) {
+  * {
+    scrollbar-width: auto;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: var(--merak-scrollbar-track);
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--merak-scrollbar-thumb);
+    border-radius: 999px;
+  }
+}
+
+@layer reset {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+}
