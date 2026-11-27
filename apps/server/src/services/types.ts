@@ -1,4 +1,6 @@
 import type {
+  CommentThreadDto,
+  CreateCommentThreadInput,
   CreateMcpTokenInput,
   CreateNodeInput,
   CreateSpaceInput,
@@ -10,9 +12,12 @@ import type {
   NodeDetailDto,
   NodeTreeItemDto,
   PatchDocInput,
+  ReplyCommentInput,
   SearchResultDto,
   SpaceDto,
   SpaceVisibility,
+  UpdateCommentMessageInput,
+  UpdateCommentThreadInput,
   UpdateNodeInput,
   UpdateSpaceInput,
   WsServerEvent,
@@ -95,6 +100,45 @@ export interface McpTokenService {
   verifyRawToken(rawToken: string): Promise<AuthContext | null>;
 }
 
+export interface CommentService {
+  listThreads(
+    ctx: AuthContext,
+    nodeId: string,
+    opts?: { includeResolved?: boolean },
+  ): Promise<CommentThreadDto[]>;
+  createThread(
+    ctx: AuthContext,
+    nodeId: string,
+    input: CreateCommentThreadInput,
+  ): Promise<CommentThreadDto>;
+  replyToThread(
+    ctx: AuthContext,
+    nodeId: string,
+    threadId: string,
+    input: ReplyCommentInput,
+  ): Promise<CommentThreadDto>;
+  updateThread(
+    ctx: AuthContext,
+    nodeId: string,
+    threadId: string,
+    input: UpdateCommentThreadInput,
+  ): Promise<CommentThreadDto>;
+  updateMessage(
+    ctx: AuthContext,
+    nodeId: string,
+    threadId: string,
+    messageId: string,
+    input: UpdateCommentMessageInput,
+  ): Promise<CommentThreadDto>;
+  deleteMessage(
+    ctx: AuthContext,
+    nodeId: string,
+    threadId: string,
+    messageId: string,
+  ): Promise<{ threadDeleted: boolean; thread: CommentThreadDto | null }>;
+  deleteThread(ctx: AuthContext, nodeId: string, threadId: string): Promise<void>;
+}
+
 export interface RealtimeBroadcaster {
   publish(event: WsServerEvent): void;
 }
@@ -102,6 +146,7 @@ export interface RealtimeBroadcaster {
 export interface AppServices {
   spaces: SpaceService;
   nodes: NodeService;
+  comments: CommentService;
   media: MediaService;
   search: SearchService;
   mcpTokens: McpTokenService;

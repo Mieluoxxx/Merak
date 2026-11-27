@@ -3,6 +3,7 @@ import type { MerakDb } from "../auth/index.js";
 import { db as defaultDb, sqlite as defaultSqlite } from "../db/client.js";
 import { env } from "../env.js";
 import { WsBroadcaster } from "../ws/broadcaster.js";
+import { createCommentService } from "./comment.service.js";
 import { createMcpTokenService } from "./mcp-token.service.js";
 import { createMediaService } from "./media.service.js";
 import { createNodeService } from "./node.service.js";
@@ -38,11 +39,13 @@ export function createServices(deps?: CreateServicesDeps): CreatedAppServices {
   const media = createMediaService({ db: dbInstance, mediaDir, realtime });
   const spaces = createSpaceService({ db: dbInstance, search, realtime });
   const nodes = createNodeService({ db: dbInstance, search, media, realtime });
+  const comments = createCommentService({ db: dbInstance, realtime });
   const mcpTokens = createMcpTokenService(dbInstance);
 
   return {
     spaces,
     nodes,
+    comments,
     media,
     search,
     mcpTokens,

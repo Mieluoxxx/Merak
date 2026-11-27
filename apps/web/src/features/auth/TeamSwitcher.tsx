@@ -12,7 +12,7 @@ import {
 import { colors, font, space } from "@merak/ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import { useQueryClient } from "@tanstack/react-query";
-import { Building2, Check, ChevronsUpDown, LogOut, UserPlus } from "lucide-react";
+import { Building2, Check, ChevronDown, LogOut, UserPlus } from "lucide-react";
 import { useState } from "react";
 import {
   extractAuthError,
@@ -32,12 +32,12 @@ export interface TeamSwitcherProps {
 const styles = stylex.create({
   trigger: {
     width: "100%",
-    height: "auto",
+    height: "32px",
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: "10px",
-    paddingBlock: "6px",
+    justifyContent: "flex-start",
+    gap: "6px",
+    paddingBlock: "4px",
     paddingInline: "8px",
     borderRadius: "7px",
     borderWidth: 0,
@@ -47,7 +47,7 @@ const styles = stylex.create({
       ":hover": colors.bgHover,
     },
     color: colors.text,
-    fontSize: font.sizeSm,
+    fontSize: "13.5px",
     fontWeight: 500,
     cursor: "pointer",
     transition: "background-color 150ms ease",
@@ -55,7 +55,7 @@ const styles = stylex.create({
   orgIdentity: {
     display: "flex",
     alignItems: "center",
-    gap: space.sm,
+    gap: "8px",
     minWidth: 0,
     overflow: "hidden",
   },
@@ -63,50 +63,51 @@ const styles = stylex.create({
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    width: "28px",
-    height: "28px",
-    borderRadius: "7px",
+    width: "22px",
+    height: "22px",
+    borderRadius: "5px",
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: colors.accentSubtle,
     backgroundColor: colors.accentSubtle,
     color: colors.accent,
-    fontSize: "11px",
+    fontSize: "10.5px",
     fontWeight: 600,
     letterSpacing: "0.02em",
     flexShrink: 0,
+    overflow: "hidden",
   },
-  orgNameWrap: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-start",
-    minWidth: 0,
+  orgAvatarImg: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
   },
   orgName: {
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
-    maxWidth: "156px",
-    fontSize: font.sizeSm,
-    fontWeight: 600,
+    minWidth: 0,
+    fontSize: "13.5px",
+    fontWeight: 500,
     letterSpacing: "-0.01em",
     lineHeight: 1.3,
     color: colors.text,
-  },
-  userEmail: {
-    fontSize: "11px",
-    color: colors.textSubtle,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    maxWidth: "156px",
-    lineHeight: 1.3,
   },
   triggerChevron: {
     color: colors.textSubtle,
     flexShrink: 0,
     display: "inline-flex",
     alignItems: "center",
+  },
+  menuAccountHeader: {
+    paddingBlock: "6px",
+    paddingInline: "10px",
+    fontSize: "11.5px",
+    lineHeight: 1.3,
+    color: colors.textSubtle,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   },
   menuContent: {
     minWidth: "236px",
@@ -161,20 +162,31 @@ export function TeamSwitcher({ onOrganizationChanged, onSignedOut }: TeamSwitche
       <Menu>
         <MenuTrigger aria-label="Workspace menu" {...stylex.props(styles.trigger)}>
           <span {...stylex.props(styles.orgIdentity)}>
-            <span {...stylex.props(styles.orgAvatar)}>{initials}</span>
-            <span {...stylex.props(styles.orgNameWrap)}>
-              <span {...stylex.props(styles.orgName)}>{displayName}</span>
-              {session.data?.user?.email ? (
-                <span {...stylex.props(styles.userEmail)}>{session.data.user.email}</span>
-              ) : null}
+            <span {...stylex.props(styles.orgAvatar)}>
+              {session.data?.user?.image ? (
+                <img
+                  src={session.data.user.image}
+                  alt=""
+                  {...stylex.props(styles.orgAvatarImg)}
+                />
+              ) : (
+                initials
+              )}
             </span>
+            <span {...stylex.props(styles.orgName)}>{displayName}</span>
           </span>
           <span {...stylex.props(styles.triggerChevron)}>
-            <ChevronsUpDown size={14} />
+            <ChevronDown size={14} />
           </span>
         </MenuTrigger>
 
-        <MenuContent align="start" sideOffset={6} {...stylex.props(styles.menuContent)}>
+        <MenuContent side="top" align="start" sideOffset={8} {...stylex.props(styles.menuContent)}>
+          {session.data?.user?.email ? (
+            <>
+              <div {...stylex.props(styles.menuAccountHeader)}>{session.data.user.email}</div>
+              <MenuSeparator />
+            </>
+          ) : null}
           {organizations.length > 1 ? (
             <>
               <MenuGroup>

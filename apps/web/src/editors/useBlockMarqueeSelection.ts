@@ -48,6 +48,8 @@ const INTERACTIVE_START_SELECTOR = [
   '[data-node-type="merakBlockEquation"]',
   ".merak-inline-equation",
   '[data-merak-equation-popover="true"]',
+  '[data-merak-image-block="true"]',
+  '[data-merak-comments="true"]',
 ].join(", ");
 
 const UI_OVERLAY_SELECTOR = [
@@ -56,6 +58,8 @@ const UI_OVERLAY_SELECTOR = [
   '[data-slot="popover-content"]',
   '[data-slot="dialog-content"]',
   '[data-merak-equation-popover="true"]',
+  '[data-merak-comments="true"]',
+  ".merak-image-lightbox",
   ".bn-ak-menu",
 ].join(", ");
 

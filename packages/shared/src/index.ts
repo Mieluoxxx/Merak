@@ -1,6 +1,7 @@
 export * from "./contracts/api.js";
 export * from "./contracts/editor.js";
 export * from "./schemas/canvas.js";
+export * from "./schemas/comment.js";
 export * from "./schemas/excalidraw.js";
 export * from "./schemas/mcp.js";
 export * from "./schemas/media.js";

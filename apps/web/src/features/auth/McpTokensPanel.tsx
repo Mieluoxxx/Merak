@@ -86,22 +86,6 @@ const styles = stylex.create({
     fontWeight: 600,
     letterSpacing: "-0.02em",
   },
-  subtitle: {
-    margin: 0,
-    marginTop: space.xs,
-    fontSize: font.sizeSm,
-    lineHeight: 1.55,
-    color: colors.textMuted,
-  },
-  inlineCode: {
-    fontFamily: font.mono,
-    fontSize: font.sizeXs,
-    paddingBlock: "1px",
-    paddingInline: "5px",
-    borderRadius: radius.sm,
-    backgroundColor: colors.bgHover,
-    color: colors.text,
-  },
   primaryAction: {
     height: "34px",
     paddingInline: "14px",
@@ -357,10 +341,6 @@ export function McpTokensPanel({ spaces: providedSpaces }: McpTokensPanelProps) 
       <div {...stylex.props(styles.header)}>
         <div {...stylex.props(styles.headerText)}>
           <h1 {...stylex.props(styles.title)}>MCP Agent Tokens</h1>
-          <p {...stylex.props(styles.subtitle)}>
-            Issue scoped Bearer tokens (<code {...stylex.props(styles.inlineCode)}>mrk_…</code>)
-            so remote AI agents can read or edit selected spaces over Streamable HTTP MCP.
-          </p>
         </div>
 
         <Button

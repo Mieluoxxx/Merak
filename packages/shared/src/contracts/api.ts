@@ -9,6 +9,13 @@ export const API_ROUTES = {
   nodePatch: (nodeId: string) => `/api/nodes/${nodeId}/patch`,
   nodeMove: (nodeId: string) => `/api/nodes/${nodeId}/move`,
   nodeRestore: (nodeId: string) => `/api/nodes/${nodeId}/restore`,
+  nodeComments: (nodeId: string) => `/api/nodes/${nodeId}/comments`,
+  nodeCommentThread: (nodeId: string, threadId: string) =>
+    `/api/nodes/${nodeId}/comments/${threadId}`,
+  nodeCommentReplies: (nodeId: string, threadId: string) =>
+    `/api/nodes/${nodeId}/comments/${threadId}/messages`,
+  nodeCommentMessage: (nodeId: string, threadId: string, messageId: string) =>
+    `/api/nodes/${nodeId}/comments/${threadId}/messages/${messageId}`,
   media: "/api/media",
   mediaById: (mediaId: string) => `/api/media/${mediaId}`,
   mediaOrphans: "/api/media/orphans",

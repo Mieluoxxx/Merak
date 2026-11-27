@@ -276,12 +276,9 @@ const styles = stylex.create({
     fontSize: font.sizeXs,
     color: colors.textSubtle,
   },
-  bottomNav: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "2px",
-    paddingBlock: "8px",
-    paddingInline: "10px",
+  bottomSwitcher: {
+    paddingBlock: "6px",
+    paddingInline: "8px",
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: colors.borderSubtle,
@@ -622,13 +619,8 @@ export function Sidebar({
 
   return (
     <aside data-slot="merak-sidebar" {...stylex.props(styles.sidebar)}>
-      <div {...stylex.props(styles.topSection)}>
-        <TeamSwitcher
-          onOrganizationChanged={onOrganizationChanged}
-          onSignedOut={onSignedOut}
-        />
-
-        {onOpenCommandPalette ? (
+      {onOpenCommandPalette ? (
+        <div {...stylex.props(styles.topSection)}>
           <button
             type="button"
             aria-label="Open command palette"
@@ -642,14 +634,44 @@ export function Sidebar({
             </Inline>
             <span {...stylex.props(styles.searchHint)}>{shortcutHint.text}</span>
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <ScrollArea {...stylex.props(styles.scrollRoot)}>
         <ScrollAreaViewport {...stylex.props(styles.scrollViewport)}>
           <ScrollAreaContent {...stylex.props(styles.scrollContent)}>
             {renderSpaceGroup("Shared", "shared", sharedSpaces)}
             {renderSpaceGroup("Private", "private", privateSpaces)}
+
+            <nav aria-label="Workspace utilities" {...stylex.props(styles.section)}>
+              <div {...stylex.props(styles.sectionHeader)}>
+                <span {...stylex.props(styles.sectionLabel)}>Workspace</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onSelectView("gallery")}
+                {...stylex.props(
+                  styles.navButton,
+                  activeView === "gallery" && styles.navButtonActive,
+                )}
+              >
+                <ImageIcon size={15} />
+                <span>Media Gallery</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onSelectView("mcp-tokens")}
+                {...stylex.props(
+                  styles.navButton,
+                  activeView === "mcp-tokens" && styles.navButtonActive,
+                )}
+              >
+                <KeyRound size={15} />
+                <span>MCP Tokens</span>
+              </button>
+            </nav>
           </ScrollAreaContent>
         </ScrollAreaViewport>
         <ScrollAreaScrollbar orientation="vertical">
@@ -657,31 +679,12 @@ export function Sidebar({
         </ScrollAreaScrollbar>
       </ScrollArea>
 
-      <nav aria-label="Workspace utilities" {...stylex.props(styles.bottomNav)}>
-        <button
-          type="button"
-          onClick={() => onSelectView("gallery")}
-          {...stylex.props(
-            styles.navButton,
-            activeView === "gallery" && styles.navButtonActive,
-          )}
-        >
-          <ImageIcon size={15} />
-          <span>Media Gallery</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onSelectView("mcp-tokens")}
-          {...stylex.props(
-            styles.navButton,
-            activeView === "mcp-tokens" && styles.navButtonActive,
-          )}
-        >
-          <KeyRound size={15} />
-          <span>MCP Tokens</span>
-        </button>
-      </nav>
+      <div {...stylex.props(styles.bottomSwitcher)}>
+        <TeamSwitcher
+          onOrganizationChanged={onOrganizationChanged}
+          onSignedOut={onSignedOut}
+        />
+      </div>
 
       <Dialog open={createSpaceOpen} onOpenChange={(nextOpen) => setCreateSpaceOpen(nextOpen)}>
         <DialogBackdrop />

@@ -1,8 +1,12 @@
 import {
   API_ROUTES,
+  createCommentThreadInputSchema,
   createNodeInputSchema,
   moveNodeInputSchema,
   patchDocInputSchema,
+  replyCommentInputSchema,
+  updateCommentMessageInputSchema,
+  updateCommentThreadInputSchema,
   updateNodeInputSchema,
 } from "@merak/shared";
 import type { Hono } from "hono";
@@ -76,5 +80,72 @@ export function mountNodeRoutes(
     const nodeId = c.req.param("nodeId");
     const restored = await services.nodes.restoreNode(ctx, nodeId);
     return c.json(restored);
+  });
+
+  app.get(`${API_ROUTES.nodes}/:nodeId/comments`, async (c) => {
+    const ctx = getAuthContext(c);
+    const nodeId = c.req.param("nodeId");
+    const includeResolved = c.req.query("includeResolved") === "true";
+    const threads = await services.comments.listThreads(ctx, nodeId, { includeResolved });
+    return c.json(threads);
+  });
+
+  app.post(`${API_ROUTES.nodes}/:nodeId/comments`, async (c) => {
+    const ctx = getAuthContext(c);
+    const nodeId = c.req.param("nodeId");
+    const input = await parseJsonBody(c, createCommentThreadInputSchema);
+    const created = await services.comments.createThread(ctx, nodeId, input);
+    return c.json(created, 201);
+  });
+
+  app.patch(`${API_ROUTES.nodes}/:nodeId/comments/:threadId`, async (c) => {
+    const ctx = getAuthContext(c);
+    const nodeId = c.req.param("nodeId");
+    const threadId = c.req.param("threadId");
+    const input = await parseJsonBody(c, updateCommentThreadInputSchema);
+    const updated = await services.comments.updateThread(ctx, nodeId, threadId, input);
+    return c.json(updated);
+  });
+
+  app.delete(`${API_ROUTES.nodes}/:nodeId/comments/:threadId`, async (c) => {
+    const ctx = getAuthContext(c);
+    const nodeId = c.req.param("nodeId");
+    const threadId = c.req.param("threadId");
+    await services.comments.deleteThread(ctx, nodeId, threadId);
+    return c.body(null, 204);
+  });
+
+  app.post(`${API_ROUTES.nodes}/:nodeId/comments/:threadId/messages`, async (c) => {
+    const ctx = getAuthContext(c);
+    const nodeId = c.req.param("nodeId");
+    const threadId = c.req.param("threadId");
+    const input = await parseJsonBody(c, replyCommentInputSchema);
+    const updated = await services.comments.replyToThread(ctx, nodeId, threadId, input);
+    return c.json(updated, 201);
+  });
+
+  app.patch(`${API_ROUTES.nodes}/:nodeId/comments/:threadId/messages/:messageId`, async (c) => {
+    const ctx = getAuthContext(c);
+    const nodeId = c.req.param("nodeId");
+    const threadId = c.req.param("threadId");
+    const messageId = c.req.param("messageId");
+    const input = await parseJsonBody(c, updateCommentMessageInputSchema);
+    const updated = await services.comments.updateMessage(
+      ctx,
+      nodeId,
+      threadId,
+      messageId,
+      input,
+    );
+    return c.json(updated);
+  });
+
+  app.delete(`${API_ROUTES.nodes}/:nodeId/comments/:threadId/messages/:messageId`, async (c) => {
+    const ctx = getAuthContext(c);
+    const nodeId = c.req.param("nodeId");
+    const threadId = c.req.param("threadId");
+    const messageId = c.req.param("messageId");
+    const result = await services.comments.deleteMessage(ctx, nodeId, threadId, messageId);
+    return c.json(result);
   });
 }

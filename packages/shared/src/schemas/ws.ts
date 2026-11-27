@@ -50,6 +50,13 @@ export const wsServerEventSchema = z.discriminatedUnion("type", [
     mediaId: z.string(),
     actorId: z.string(),
   }),
+  z.object({
+    type: z.literal("comment.changed"),
+    orgId: z.string(),
+    spaceId: z.string(),
+    nodeId: z.string(),
+    actorId: z.string(),
+  }),
 ]);
 export type WsServerEvent = z.infer<typeof wsServerEventSchema>;
 

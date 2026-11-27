@@ -224,3 +224,56 @@ export const mcpTokens = sqliteTable("mcp_tokens", {
     .notNull()
     .default(sql`(datetime('now'))`),
 });
+
+export const commentThreads = sqliteTable(
+  "comment_threads",
+  {
+    id: text("id").primaryKey(),
+    nodeId: text("node_id")
+      .notNull()
+      .references(() => nodes.id, { onDelete: "cascade" }),
+    blockIndex: integer("block_index").notNull(),
+    blockType: text("block_type").notNull(),
+    quote: text("quote").notNull().default(""),
+    status: text("status", { enum: ["open", "resolved"] })
+      .notNull()
+      .default("open"),
+    resolvedBy: text("resolved_by").references(() => user.id, { onDelete: "set null" }),
+    resolvedAt: text("resolved_at"),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => [
+    index("comment_threads_node_idx").on(table.nodeId, table.status, table.blockIndex),
+  ],
+);
+
+export const commentMessages = sqliteTable(
+  "comment_messages",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => commentThreads.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    authorId: text("author_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => [
+    index("comment_messages_thread_idx").on(table.threadId, table.createdAt),
+  ],
+);

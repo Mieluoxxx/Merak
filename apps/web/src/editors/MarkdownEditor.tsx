@@ -81,6 +81,7 @@ import {
 } from "lucide-react";
 import {
   createContext,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useContext,
@@ -89,8 +90,26 @@ import {
   useRef,
   useState,
 } from "react";
-import { countWordsAndChars, extractBlockPlainText, extractBlocksPlainText } from "./blockMetrics.js";
+import {
+  type BlockTextLike,
+  countWordsAndChars,
+  extractBlockPlainText,
+  extractBlocksPlainText,
+} from "./blockMetrics.js";
 import { cloneBlocksForDuplicate } from "./blockSelection.js";
+import {
+  areTocHeadingsEqual,
+  extractDocumentHeadings,
+  MarkdownToc,
+  type TocHeading,
+} from "./MarkdownToc.js";
+import {
+  type CommentDisplayMode,
+  loadCommentDisplayMode,
+  MarkdownBlockComments,
+  MarkdownCommentsToolbarButton,
+  saveCommentDisplayMode,
+} from "./MarkdownBlockComments.js";
 import {
   DocAppearancePopover,
   loadDocAppearance,
@@ -98,6 +117,11 @@ import {
   type DocAppearanceSettings,
 } from "./DocAppearancePopover.js";
 import { createMerakCodeBlockSpec } from "./MerakCodeBlock.js";
+import {
+  clearImageBlockUploading,
+  createMerakImageBlockSpec,
+  markImageBlockUploading,
+} from "./MerakImageBlock.js";
 import {
   createMerakBlockEquationSpec,
   createMerakInlineEquationSpec,
@@ -185,6 +209,13 @@ const styles = stylex.create({
   hintText: {
     fontSize: font.sizeXs,
     color: colors.textSubtle,
+  },
+  editorStage: {
+    position: "relative",
+    flex: 1,
+    minHeight: 0,
+    display: "flex",
+    flexDirection: "column",
   },
   editorScroll: {
     flex: 1,
@@ -718,10 +749,35 @@ const createMerakEmbedBlock = createReactBlockSpec(
   },
 );
 
+const DIRECT_IMAGE_URL_REGEX =
+  /^https?:\/\/\S+\.(?:png|jpe?g|gif|webp|avif|svg)(?:\?\S*)?(?:#\S*)?$/i;
+
+function extractImageFilesFromDataTransfer(dataTransfer: DataTransfer | null): File[] {
+  if (!dataTransfer) return [];
+
+  if (dataTransfer.files && dataTransfer.files.length > 0) {
+    return Array.from(dataTransfer.files).filter((file) => file.type.startsWith("image/"));
+  }
+
+  if (dataTransfer.items) {
+    const files: File[] = [];
+    for (const item of Array.from(dataTransfer.items)) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) files.push(file);
+      }
+    }
+    return files;
+  }
+
+  return [];
+}
+
 const merakMarkdownSchema = BlockNoteSchema.create({
   blockSpecs: {
     ...defaultBlockSpecs,
     codeBlock: createMerakCodeBlockSpec(),
+    image: createMerakImageBlockSpec(),
     merakBlockEquation: createMerakBlockEquationSpec(),
     merakChild: createMerakChildBlock(),
     merakEmbed: createMerakEmbedBlock(),
@@ -868,11 +924,25 @@ export function MarkdownEditor({
   const onCreateChildRef = useRef(onCreateChild);
   onCreateChildRef.current = onCreateChild;
 
+  const [tocHeadings, setTocHeadings] = useState<TocHeading[]>([]);
+  const [docRevision, setDocRevision] = useState(0);
+  const [isImageDragOver, setIsImageDragOver] = useState(false);
+  const [commentDisplayMode, setCommentDisplayMode] = useState<CommentDisplayMode>(() =>
+    loadCommentDisplayMode(),
+  );
+  const [commentRailActive, setCommentRailActive] = useState(false);
+  const [activeCommentThreadId, setActiveCommentThreadId] = useState<string | null>(null);
+
+  const handleCommentDisplayModeChange = useCallback((mode: CommentDisplayMode) => {
+    setCommentDisplayMode(mode);
+    saveCommentDisplayMode(mode);
+  }, []);
   const isHydratingRef = useRef(false);
   const isAutoConvertingMathRef = useRef(false);
   const hydratedNodeIdRef = useRef<string | null>(null);
   const lastEmittedMarkdownRef = useRef<string>(node.content);
   const editorScrollRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const selectionControlRef = useRef<{
     setSelectedIds: (ids: string[]) => void;
     clearSelection: () => void;
@@ -901,12 +971,27 @@ export function MarkdownEditor({
     [],
   );
 
+  const syncTocHeadings = useCallback(() => {
+    setDocRevision((rev) => rev + 1);
+    const next = extractDocumentHeadings(editor.document as readonly BlockTextLike[]);
+    setTocHeadings((prev) => (areTocHeadingsEqual(prev, next) ? prev : next));
+  }, [editor]);
+
+  const getCommentDocumentBlocks = useCallback(
+    () =>
+      editor.document as unknown as readonly (BlockTextLike & {
+        id?: string;
+      })[],
+    [editor],
+  );
+
   // Hydrate BlockNote blocks from clean Markdown on mount, when `node.id` changes, or when server/draft content updates externally.
   useEffect(() => {
     if (
       hydratedNodeIdRef.current === node.id &&
       node.content === lastEmittedMarkdownRef.current
     ) {
+      syncTocHeadings();
       return;
     }
     hydratedNodeIdRef.current = node.id;
@@ -915,12 +1000,13 @@ export function MarkdownEditor({
       const nextBlocks = parseMerakMarkdownToBlocks(editor, node.content);
       editor.replaceBlocks(editor.document, nextBlocks);
       lastEmittedMarkdownRef.current = node.content;
+      syncTocHeadings();
     } finally {
       queueMicrotask(() => {
         isHydratingRef.current = false;
       });
     }
-  }, [editor, node.id, node.content]);
+  }, [editor, node.id, node.content, syncTocHeadings]);
 
   const handleEditorChange = useCallback(() => {
     if (isHydratingRef.current || readOnly) return;
@@ -989,12 +1075,200 @@ export function MarkdownEditor({
       }
     }
 
+    syncTocHeadings();
     const nextMarkdown = serializeEditorToMerakMarkdown(editor);
-    if (nextMarkdown !== lastEmittedMarkdownRef.current) {
+    // Never persist transient blob: preview URLs while an optimistic image upload is still in flight.
+    if (!nextMarkdown.includes("](blob:") && nextMarkdown !== lastEmittedMarkdownRef.current) {
       lastEmittedMarkdownRef.current = nextMarkdown;
       onChangeRef.current(nextMarkdown);
     }
-  }, [editor, readOnly]);
+  }, [editor, readOnly, syncTocHeadings]);
+
+  const insertAndUploadImageFiles = useCallback(
+    async (files: readonly File[]) => {
+      if (readOnly || files.length === 0) return;
+
+      const cursorBlock = editor.getTextCursorPosition()?.block ?? editor.document.at(-1);
+      if (!cursorBlock) return;
+
+      const insertedEntries: { blockId: string; previewUrl: string; file: File }[] = [];
+      let anchorBlockId = cursorBlock.id;
+
+      for (let i = 0; i < files.length; i += 1) {
+        const file = files[i];
+        if (!file) continue;
+        const previewUrl = URL.createObjectURL(file);
+        const fileName = file.name || "pasted-image.png";
+        const blockSpec: MerakPartialBlock = {
+          type: "image",
+          props: {
+            url: previewUrl,
+            name: fileName,
+            caption: "",
+          },
+        };
+
+        let insertedId: string | undefined;
+        const anchorBlock = editor.getBlock(anchorBlockId);
+        if (
+          i === 0 &&
+          anchorBlock &&
+          anchorBlock.type === "paragraph" &&
+          extractBlockPlainText(anchorBlock).trim() === ""
+        ) {
+          const result = editor.replaceBlocks([anchorBlock.id], [blockSpec]);
+          insertedId = result.insertedBlocks[0]?.id;
+        } else {
+          const result = editor.insertBlocks([blockSpec], anchorBlockId, "after");
+          insertedId = result[0]?.id;
+        }
+
+        if (insertedId) {
+          anchorBlockId = insertedId;
+          markImageBlockUploading(insertedId, previewUrl);
+          insertedEntries.push({ blockId: insertedId, previewUrl, file });
+        } else {
+          URL.revokeObjectURL(previewUrl);
+        }
+      }
+
+      if (insertedEntries.length === 0) return;
+
+      const lastDocBlock = editor.document.at(-1);
+      if (lastDocBlock && lastDocBlock.id === anchorBlockId) {
+        const insertedTrailing = editor.insertBlocks([{ type: "paragraph" }], anchorBlockId, "after");
+        const trailingId = insertedTrailing[0]?.id;
+        if (trailingId) {
+          try {
+            editor.setTextCursorPosition(trailingId, "start");
+          } catch {
+            // Ignore focus restoration errors if unmounted during async paste.
+          }
+        }
+      }
+
+      await Promise.all(
+        insertedEntries.map(async ({ blockId, previewUrl, file }) => {
+          try {
+            const media = await onUploadMediaRef.current(file);
+            const existing = editor.getBlock(blockId);
+            if (existing && existing.type === "image") {
+              editor.updateBlock(blockId, {
+                props: {
+                  url: formatMediaUrl(media),
+                  name: media.filename,
+                },
+              });
+            }
+          } catch {
+            const existing = editor.getBlock(blockId);
+            if (
+              existing &&
+              existing.type === "image" &&
+              existing.props.url === previewUrl
+            ) {
+              editor.removeBlocks([blockId]);
+            }
+            toast.error("Image upload failed");
+          } finally {
+            clearImageBlockUploading(blockId);
+            window.setTimeout(() => URL.revokeObjectURL(previewUrl), 250);
+          }
+        }),
+      );
+    },
+    [editor, readOnly],
+  );
+
+  // Intercept paste and drop in the native capture phase so ProseMirror's built-in file handler never inserts a duplicate block.
+  useEffect(() => {
+    const scrollEl = editorScrollRef.current;
+    if (!scrollEl) return;
+
+    const handleNativePaste = (event: ClipboardEvent) => {
+      if (readOnly) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest(
+          'input, textarea, [data-merak-comments="true"], [data-merak-equation-popover="true"], [data-merak-code-lang-popover="true"]',
+        )
+      ) {
+        return;
+      }
+
+      const cursorBlock = editor.getTextCursorPosition()?.block;
+      if (cursorBlock?.type === "codeBlock") return;
+
+      const imageFiles = extractImageFilesFromDataTransfer(event.clipboardData);
+      if (imageFiles.length > 0) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        void insertAndUploadImageFiles(imageFiles);
+        return;
+      }
+
+      const plainText = event.clipboardData?.getData("text/plain")?.trim() ?? "";
+      if (plainText && DIRECT_IMAGE_URL_REGEX.test(plainText)) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        const anchor = cursorBlock ?? editor.document.at(-1);
+        if (!anchor) return;
+        const filename = plainText.split("/").pop()?.split(/[?#]/)[0] || "image";
+        const imageBlock: MerakPartialBlock = {
+          type: "image",
+          props: { url: plainText, name: filename, caption: "" },
+        };
+        if (anchor.type === "paragraph" && extractBlockPlainText(anchor).trim() === "") {
+          editor.replaceBlocks([anchor.id], [imageBlock]);
+        } else {
+          editor.insertBlocks([imageBlock], anchor.id, "after");
+        }
+      }
+    };
+
+    const handleNativeDrop = (event: DragEvent) => {
+      setIsImageDragOver(false);
+      if (readOnly) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-slot="popover-content"], .merak-file-panel')) return;
+      const imageFiles = extractImageFilesFromDataTransfer(event.dataTransfer);
+      if (imageFiles.length === 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      void insertAndUploadImageFiles(imageFiles);
+    };
+
+    scrollEl.addEventListener("paste", handleNativePaste, { capture: true });
+    scrollEl.addEventListener("drop", handleNativeDrop, { capture: true });
+    return () => {
+      scrollEl.removeEventListener("paste", handleNativePaste, { capture: true });
+      scrollEl.removeEventListener("drop", handleNativeDrop, { capture: true });
+    };
+  }, [editor, insertAndUploadImageFiles, readOnly]);
+
+  const handleEditorDragOver = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (readOnly) return;
+      const hasFiles = Array.from(event.dataTransfer?.types ?? []).includes("Files");
+      if (!hasFiles) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-slot="popover-content"], .merak-file-panel')) return;
+      event.preventDefault();
+      if (!isImageDragOver) {
+        setIsImageDragOver(true);
+      }
+    },
+    [isImageDragOver, readOnly],
+  );
+
+  const handleEditorDragLeave = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    const next = event.relatedTarget as Node | null;
+    if (next && event.currentTarget.contains(next)) return;
+    setIsImageDragOver(false);
+  }, []);
 
   const handleEditorKeyDownCapture = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -1348,6 +1622,14 @@ export function MarkdownEditor({
                 </Button>
               </>
             ) : null}
+            <MarkdownCommentsToolbarButton
+              nodeId={node.id}
+              readOnly={readOnly}
+              displayMode={commentDisplayMode}
+              onDisplayModeChange={handleCommentDisplayModeChange}
+              theme={theme}
+              onSelectThread={setActiveCommentThreadId}
+            />
             <DocAppearancePopover
               settings={docAppearance}
               onChange={handleAppearanceChange}
@@ -1357,18 +1639,27 @@ export function MarkdownEditor({
           </Inline>
         </Toolbar>
 
-        <div
-          ref={editorScrollRef}
-          data-merak-editor="markdown"
-          data-merak-theme={theme}
-          data-merak-doc-font={docAppearance.fontStyle}
-          data-merak-doc-small={docAppearance.smallText ? "true" : undefined}
-          data-merak-doc-full={docAppearance.fullWidth ? "true" : undefined}
-          data-marquee-dragging={marquee.isDragging ? "true" : undefined}
-          onPointerDown={marquee.handlePointerDown}
-          onKeyDownCapture={handleEditorKeyDownCapture}
-          {...stylex.props(styles.editorScroll)}
-        >
+        <div {...stylex.props(styles.editorStage)}>
+          <div
+            ref={editorScrollRef}
+            data-merak-editor="markdown"
+            data-merak-theme={theme}
+            data-merak-doc-font={docAppearance.fontStyle}
+            data-merak-doc-small={docAppearance.smallText ? "true" : undefined}
+            data-merak-doc-full={docAppearance.fullWidth ? "true" : undefined}
+            data-marquee-dragging={marquee.isDragging ? "true" : undefined}
+            data-merak-image-drop={isImageDragOver ? "true" : undefined}
+            onPointerDown={marquee.handlePointerDown}
+            onKeyDownCapture={handleEditorKeyDownCapture}
+            onDragOver={handleEditorDragOver}
+            onDragLeave={handleEditorDragLeave}
+            {...stylex.props(styles.editorScroll)}
+          >
+          <div
+            ref={canvasRef}
+            className="merak-editor-canvas"
+            data-comment-rail={commentRailActive ? "true" : undefined}
+          >
           <BlockNoteView
             editor={editor}
             theme={theme}
@@ -1392,6 +1683,22 @@ export function MarkdownEditor({
               </>
             ) : null}
           </BlockNoteView>
+
+          <MarkdownBlockComments
+            nodeId={node.id}
+            readOnly={readOnly}
+            fullWidth={docAppearance.fullWidth}
+            displayMode={commentDisplayMode}
+            theme={theme}
+            docRevision={docRevision}
+            getDocumentBlocks={getCommentDocumentBlocks}
+            scrollContainerRef={editorScrollRef}
+            canvasRef={canvasRef}
+            activeThreadId={activeCommentThreadId}
+            onActiveThreadIdChange={setActiveCommentThreadId}
+            onRailActiveChange={setCommentRailActive}
+          />
+          </div>
 
           {marquee.marqueeRect && marquee.marqueeRect.width > 0 && marquee.marqueeRect.height > 0 ? (
             <div
@@ -1572,6 +1879,12 @@ export function MarkdownEditor({
               </Button>
             </div>
           ) : null}
+          </div>
+          <MarkdownToc
+            headings={tocHeadings}
+            scrollContainerRef={editorScrollRef}
+            theme={theme}
+          />
         </div>
 
         <Dialog open={embedDialogOpen} onOpenChange={setEmbedDialogOpen}>

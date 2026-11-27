@@ -1,5 +1,7 @@
 import {
   API_ROUTES,
+  type CommentThreadDto,
+  type CreateCommentThreadInput,
   type CreateMcpTokenInput,
   type CreateNodeInput,
   type CreateSpaceInput,
@@ -9,9 +11,12 @@ import {
   type MoveNodeInput,
   type NodeDetailDto,
   type NodeTreeItemDto,
+  type ReplyCommentInput,
   type SearchResultDto,
   type SpaceDto,
   type SpaceVisibility,
+  type UpdateCommentMessageInput,
+  type UpdateCommentThreadInput,
   type UpdateNodeInput,
   type UpdateSpaceInput,
 } from "@merak/shared";
@@ -22,6 +27,7 @@ export const workspaceQueryKeys = {
     visibility ? (["spaces", visibility] as const) : (["spaces"] as const),
   tree: (spaceId: string) => ["tree", spaceId] as const,
   node: (nodeId: string) => ["node", nodeId] as const,
+  comments: (nodeId: string) => ["comments", nodeId] as const,
   media: (filter?: { spaceId?: string | null; orphansOnly?: boolean }) => {
     if (!filter) return ["media"] as const;
     if (filter.orphansOnly) return ["media", "orphans"] as const;
@@ -198,6 +204,81 @@ export async function createMcpToken(input: CreateMcpTokenInput): Promise<Create
 
 export async function revokeMcpToken(tokenId: string): Promise<void> {
   await apiFetch<unknown>(API_ROUTES.mcpTokenById(tokenId), {
+    method: "DELETE",
+  });
+}
+
+// Block Comments
+export async function fetchNodeComments(
+  nodeId: string,
+  opts?: { includeResolved?: boolean },
+): Promise<CommentThreadDto[]> {
+  const query = opts?.includeResolved ? "?includeResolved=true" : "";
+  return apiFetch<CommentThreadDto[]>(`${API_ROUTES.nodeComments(nodeId)}${query}`);
+}
+
+export async function createCommentThread(
+  nodeId: string,
+  input: CreateCommentThreadInput,
+): Promise<CommentThreadDto> {
+  return apiFetch<CommentThreadDto>(API_ROUTES.nodeComments(nodeId), {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function replyCommentThread(
+  nodeId: string,
+  threadId: string,
+  input: ReplyCommentInput,
+): Promise<CommentThreadDto> {
+  return apiFetch<CommentThreadDto>(API_ROUTES.nodeCommentReplies(nodeId, threadId), {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateCommentThread(
+  nodeId: string,
+  threadId: string,
+  input: UpdateCommentThreadInput,
+): Promise<CommentThreadDto> {
+  return apiFetch<CommentThreadDto>(API_ROUTES.nodeCommentThread(nodeId, threadId), {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateCommentMessage(
+  nodeId: string,
+  threadId: string,
+  messageId: string,
+  input: UpdateCommentMessageInput,
+): Promise<CommentThreadDto> {
+  return apiFetch<CommentThreadDto>(
+    API_ROUTES.nodeCommentMessage(nodeId, threadId, messageId),
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export async function deleteCommentMessage(
+  nodeId: string,
+  threadId: string,
+  messageId: string,
+): Promise<{ threadDeleted: boolean; thread: CommentThreadDto | null }> {
+  return apiFetch<{ threadDeleted: boolean; thread: CommentThreadDto | null }>(
+    API_ROUTES.nodeCommentMessage(nodeId, threadId, messageId),
+    {
+      method: "DELETE",
+    },
+  );
+}
+
+export async function deleteCommentThread(nodeId: string, threadId: string): Promise<void> {
+  await apiFetch<unknown>(API_ROUTES.nodeCommentThread(nodeId, threadId), {
     method: "DELETE",
   });
 }

@@ -330,6 +330,9 @@ export function invalidateQueriesForWsEvent(
     case "media.deleted":
       void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.media() });
       break;
+    case "comment.changed":
+      void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.comments(event.nodeId) });
+      break;
   }
 }
 
