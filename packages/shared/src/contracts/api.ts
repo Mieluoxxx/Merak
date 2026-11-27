@@ -15,6 +15,10 @@ export const API_ROUTES = {
   search: "/api/search",
   mcpTokens: "/api/mcp-tokens",
   mcpTokenById: (tokenId: string) => `/api/mcp-tokens/${tokenId}`,
+  uiSdkWebCss: "/ui-sdk/web.css",
+  uiSdkCss: "/ui-sdk/merak-ui.css",
+  uiSdkJs: "/ui-sdk/merak-artifact.js",
+  uiSdkManifest: "/ui-sdk/manifest.json",
   ws: "/ws",
   mcp: "/mcp",
 } as const;

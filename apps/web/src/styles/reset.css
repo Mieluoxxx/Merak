@@ -1,4 +1,4 @@
-@layer reset, thirdparty, stylex;
+@layer reset, ui-sdk, thirdparty, stylex;
 
 :root {
   color-scheme: light dark;

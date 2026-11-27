@@ -1,0 +1,21 @@
+@import "@ui-sdk/core/web.css";
+
+@layer ui-sdk {
+  :where(:root, :host) {
+    --ui-radius: 6px;
+    --ui-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    --ui-font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  }
+
+  [data-theme="light"] {
+    color-scheme: light;
+    --lightningcss-light: initial;
+    --lightningcss-dark: ;
+  }
+
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --lightningcss-light: ;
+    --lightningcss-dark: initial;
+  }
+}
