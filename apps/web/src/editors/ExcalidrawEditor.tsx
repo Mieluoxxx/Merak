@@ -1,10 +1,10 @@
 import { Excalidraw } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import type { AssetEditorProps } from "@merak/shared";
-import { Badge, Button, Inline, Toolbar } from "@merak/ui";
+import { Badge, Inline, Toolbar } from "@merak/ui";
 import { colors, font, radius, space } from "@merak/ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
-import { PenTool, Save, Upload } from "lucide-react";
+import { PenTool, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./editors.css";
 import {
@@ -83,7 +83,6 @@ export function ExcalidrawEditor({
     countActiveExcalidrawElements(initialDoc),
   );
   const [uploadingCount, setUploadingCount] = useState(0);
-  const [saving, setSaving] = useState(false);
 
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -178,13 +177,8 @@ export function ExcalidrawEditor({
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
-    setSaving(true);
-    try {
-      const serialized = flushSerialization(true);
-      await onSaveRef.current(serialized);
-    } finally {
-      setSaving(false);
-    }
+    const serialized = flushSerialization(true);
+    await onSaveRef.current(serialized);
   }, [flushSerialization, readOnly]);
 
   useGlobalSaveShortcut(Boolean(onSave) && !readOnly, handleSave);
@@ -294,18 +288,9 @@ export function ExcalidrawEditor({
             </Badge>
           ) : null}
         </Inline>
-
-        <Inline gap="xs">
-          {onSave && !readOnly ? (
-            <Button disabled={saving} onClick={handleSave}>
-              <Save size={14} />
-              {saving ? "Saving..." : "Save"}
-            </Button>
-          ) : null}
-        </Inline>
       </Toolbar>
 
-      <div className="merak-excalidraw-host" {...stylex.props(styles.canvasWrap)}>
+      <div data-merak-editor="excalidraw" {...stylex.props(styles.canvasWrap)}>
         <Excalidraw
           key={node.id}
           theme={theme}

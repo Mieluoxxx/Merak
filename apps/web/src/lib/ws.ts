@@ -404,10 +404,19 @@ export function useWorkspaceRealtime(
     const unsubEvent = client.onEvent((event) => {
       setLastEvent(event);
       const conflict = detectStaleConflict(event, editingRef.current);
+      const isOwnNodeUpdate =
+        event.type === "node.updated" &&
+        event.nodeId === editingRef.current.editingNodeId &&
+        Boolean(editingRef.current.currentUserId) &&
+        event.actorId === editingRef.current.currentUserId;
       if (conflict) {
         setConflictEvent(conflict);
         invalidateQueriesForWsEvent(queryClient, event, {
           skipNodeInvalidationId: conflict.nodeId,
+        });
+      } else if (isOwnNodeUpdate) {
+        invalidateQueriesForWsEvent(queryClient, event, {
+          skipNodeInvalidationId: event.nodeId,
         });
       } else {
         invalidateQueriesForWsEvent(queryClient, event);

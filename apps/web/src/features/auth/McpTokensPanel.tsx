@@ -61,8 +61,9 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "column",
     gap: space.xl,
-    maxWidth: "920px",
+    maxWidth: "880px",
     width: "100%",
+    marginInline: "auto",
   },
   header: {
     display: "flex",
@@ -70,17 +71,43 @@ const styles = stylex.create({
     justifyContent: "space-between",
     gap: space.md,
     flexWrap: "wrap",
+    paddingBottom: space.lg,
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: colors.borderSubtle,
+  },
+  headerText: {
+    flex: "1 1 320px",
+    minWidth: 0,
   },
   title: {
     margin: 0,
     fontSize: font.sizeXl,
     fontWeight: 600,
+    letterSpacing: "-0.02em",
   },
   subtitle: {
     margin: 0,
     marginTop: space.xs,
     fontSize: font.sizeSm,
+    lineHeight: 1.55,
     color: colors.textMuted,
+  },
+  inlineCode: {
+    fontFamily: font.mono,
+    fontSize: font.sizeXs,
+    paddingBlock: "1px",
+    paddingInline: "5px",
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgHover,
+    color: colors.text,
+  },
+  primaryAction: {
+    height: "34px",
+    paddingInline: "14px",
+    fontSize: font.sizeSm,
+    borderRadius: radius.md,
+    flexShrink: 0,
   },
   revealCard: {
     borderColor: colors.warning,
@@ -102,7 +129,9 @@ const styles = stylex.create({
     paddingBlock: space.sm,
     paddingInline: space.md,
     borderRadius: radius.md,
-    border: `1px solid ${colors.border}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.border,
     backgroundColor: colors.bg,
     fontFamily: font.mono,
     fontSize: font.sizeSm,
@@ -111,7 +140,9 @@ const styles = stylex.create({
   tokenList: {
     display: "flex",
     flexDirection: "column",
-    gap: space.sm,
+    borderTopWidth: "1px",
+    borderTopStyle: "solid",
+    borderTopColor: colors.borderSubtle,
   },
   tokenRow: {
     display: "flex",
@@ -119,6 +150,19 @@ const styles = stylex.create({
     justifyContent: "space-between",
     gap: space.md,
     flexWrap: "wrap",
+    paddingBlock: space.md,
+    paddingInline: space.sm,
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: colors.borderSubtle,
+    backgroundColor: {
+      default: "transparent",
+      ":hover": colors.bgSubtle,
+    },
+    transition: "background-color 140ms ease",
+  },
+  tokenRowRevoked: {
+    opacity: 0.65,
   },
   tokenMeta: {
     display: "flex",
@@ -151,6 +195,14 @@ const styles = stylex.create({
     gap: space.md,
     marginTop: space.md,
   },
+  dialogFooter: {
+    marginTop: "4px",
+    paddingTop: "14px",
+    borderTopWidth: "1px",
+    borderTopStyle: "solid",
+    borderTopColor: colors.borderSubtle,
+    gap: "10px",
+  },
   spacePicker: {
     display: "flex",
     flexDirection: "column",
@@ -159,7 +211,9 @@ const styles = stylex.create({
     overflowY: "auto",
     padding: space.sm,
     borderRadius: radius.md,
-    border: `1px solid ${colors.border}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.border,
     backgroundColor: colors.bgSubtle,
   },
   spaceOption: {
@@ -175,7 +229,9 @@ const styles = stylex.create({
     paddingInline: space.md,
     borderRadius: radius.md,
     backgroundColor: "rgba(220, 38, 38, 0.1)",
-    border: `1px solid ${colors.danger}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.danger,
     color: colors.danger,
     fontSize: font.sizeSm,
   },
@@ -299,16 +355,17 @@ export function McpTokensPanel({ spaces: providedSpaces }: McpTokensPanelProps) 
   return (
     <section data-slot="merak-mcp-tokens" {...stylex.props(styles.root)}>
       <div {...stylex.props(styles.header)}>
-        <div>
+        <div {...stylex.props(styles.headerText)}>
           <h1 {...stylex.props(styles.title)}>MCP Agent Tokens</h1>
           <p {...stylex.props(styles.subtitle)}>
-            Issue scoped Bearer tokens (`mrk_...`) so remote AI agents can read or edit selected
-            spaces over Streamable HTTP MCP.
+            Issue scoped Bearer tokens (<code {...stylex.props(styles.inlineCode)}>mrk_…</code>)
+            so remote AI agents can read or edit selected spaces over Streamable HTTP MCP.
           </p>
         </div>
 
         <Button
           data-variant="solid"
+          {...stylex.props(styles.primaryAction)}
           onClick={() => {
             setFormError(null);
             setCreateOpen(true);
@@ -358,19 +415,21 @@ export function McpTokensPanel({ spaces: providedSpaces }: McpTokensPanelProps) 
           </Inline>
         </Card>
       ) : tokens.length === 0 ? (
-        <Card padding="none" variant="bordered">
-          <EmptyState
-            icon={<KeyRound size={28} />}
-            title="No MCP tokens yet"
-            description="Create a scoped token to connect Claude, Cursor, or custom agents to your Merak spaces."
-            action={
-              <Button data-variant="solid" onClick={() => setCreateOpen(true)}>
-                <Plus size={14} />
-                <span>Create First Token</span>
-              </Button>
-            }
-          />
-        </Card>
+        <EmptyState
+          icon={<KeyRound size={22} />}
+          title="No MCP tokens yet"
+          description="Create a scoped token to connect Claude, Cursor, or custom agents to your Merak spaces."
+          action={
+            <Button
+              data-variant="solid"
+              {...stylex.props(styles.primaryAction)}
+              onClick={() => setCreateOpen(true)}
+            >
+              <Plus size={14} />
+              <span>Create First Token</span>
+            </Button>
+          }
+        />
       ) : (
         <div {...stylex.props(styles.tokenList)}>
           {tokens.map((token) => {
@@ -383,36 +442,37 @@ export function McpTokensPanel({ spaces: providedSpaces }: McpTokensPanelProps) 
                     .join(", ");
 
             return (
-              <Card key={token.id} padding="md" variant={isRevoked ? "subtle" : "elevated"}>
-                <div {...stylex.props(styles.tokenRow)}>
-                  <div {...stylex.props(styles.tokenMeta)}>
-                    <Inline gap="sm" wrap>
-                      <span {...stylex.props(styles.tokenName)}>{token.name}</span>
-                      <span {...stylex.props(styles.tokenPrefix)}>{token.prefix}…</span>
-                      <Badge tone={token.scopes.permission === "write" ? "warning" : "accent"}>
-                        {token.scopes.permission}
-                      </Badge>
-                      <Badge tone="neutral">{scopeLabel}</Badge>
-                      {isRevoked ? <Badge tone="danger">Revoked</Badge> : null}
-                    </Inline>
-                    <div {...stylex.props(styles.tokenDates)}>
-                      Created: {formatTimestamp(token.createdAt)} · Last used:{" "}
-                      {formatTimestamp(token.lastUsedAt)}
-                      {token.revokedAt ? ` · Revoked: ${formatTimestamp(token.revokedAt)}` : ""}
-                    </div>
+              <div
+                key={token.id}
+                {...stylex.props(styles.tokenRow, isRevoked && styles.tokenRowRevoked)}
+              >
+                <div {...stylex.props(styles.tokenMeta)}>
+                  <Inline gap="sm" wrap>
+                    <span {...stylex.props(styles.tokenName)}>{token.name}</span>
+                    <span {...stylex.props(styles.tokenPrefix)}>{token.prefix}…</span>
+                    <Badge tone={token.scopes.permission === "write" ? "warning" : "accent"}>
+                      {token.scopes.permission}
+                    </Badge>
+                    <Badge tone="neutral">{scopeLabel}</Badge>
+                    {isRevoked ? <Badge tone="danger">Revoked</Badge> : null}
+                  </Inline>
+                  <div {...stylex.props(styles.tokenDates)}>
+                    Created: {formatTimestamp(token.createdAt)} · Last used:{" "}
+                    {formatTimestamp(token.lastUsedAt)}
+                    {token.revokedAt ? ` · Revoked: ${formatTimestamp(token.revokedAt)}` : ""}
                   </div>
-
-                  {!isRevoked ? (
-                    <Button
-                      data-variant="destructive"
-                      onClick={() => setRevokeTarget(token)}
-                    >
-                      <Trash2 size={14} />
-                      <span>Revoke</span>
-                    </Button>
-                  ) : null}
                 </div>
-              </Card>
+
+                {!isRevoked ? (
+                  <Button
+                    data-variant="destructive"
+                    onClick={() => setRevokeTarget(token)}
+                  >
+                    <Trash2 size={14} />
+                    <span>Revoke</span>
+                  </Button>
+                ) : null}
+              </div>
             );
           })}
         </div>
@@ -504,7 +564,7 @@ export function McpTokensPanel({ spaces: providedSpaces }: McpTokensPanelProps) 
                 </div>
               ) : null}
 
-              <Inline justify="end" gap="sm">
+              <Inline justify="end" gap="sm" xstyle={styles.dialogFooter}>
                 <DialogClose disabled={createMutation.isPending}>Cancel</DialogClose>
                 <Button
                   type="submit"
@@ -533,7 +593,7 @@ export function McpTokensPanel({ spaces: providedSpaces }: McpTokensPanelProps) 
               ? `Any agent using "${revokeTarget.name}" (${revokeTarget.prefix}…) will immediately lose access.`
               : "This token will immediately lose access."}
           </AlertDialogDescription>
-          <Inline justify="end" gap="sm">
+          <Inline justify="end" gap="sm" xstyle={styles.dialogFooter}>
             <AlertDialogClose disabled={revokeMutation.isPending}>Cancel</AlertDialogClose>
             <Button
               data-variant="destructive"

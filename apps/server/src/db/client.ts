@@ -10,9 +10,9 @@ fs.mkdirSync(env.MEDIA_DIR, { recursive: true });
 fs.mkdirSync(path.dirname(env.DB_PATH), { recursive: true });
 
 export const sqlite: InstanceType<typeof Database> = new Database(env.DB_PATH);
+sqlite.pragma("busy_timeout = 5000");
 sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("foreign_keys = ON");
-sqlite.pragma("busy_timeout = 5000");
 
 export const db = drizzle(sqlite, { schema });
 

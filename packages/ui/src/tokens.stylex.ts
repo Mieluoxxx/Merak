@@ -3,22 +3,22 @@ import * as stylex from "@stylexjs/stylex";
 const DARK = "@media (prefers-color-scheme: dark)" as const;
 
 export const colors = stylex.defineVars({
-  bg: { default: "#ffffff", [DARK]: "#111215" },
-  bgSubtle: { default: "#f7f7f5", [DARK]: "#18191d" },
-  bgElevated: { default: "#ffffff", [DARK]: "#1f2026" },
-  bgHover: { default: "rgba(15, 23, 42, 0.05)", [DARK]: "rgba(255, 255, 255, 0.06)" },
-  bgActive: { default: "rgba(15, 23, 42, 0.09)", [DARK]: "rgba(255, 255, 255, 0.11)" },
-  border: { default: "#e4e4e0", [DARK]: "#2c2e36" },
-  borderSubtle: { default: "#efefec", [DARK]: "#23252c" },
-  text: { default: "#18181b", [DARK]: "#eceef2" },
-  textMuted: { default: "#52525b", [DARK]: "#a1a6b3" },
-  textSubtle: { default: "#8c8c94", [DARK]: "#6e7380" },
-  accent: { default: "#2563eb", [DARK]: "#60a5fa" },
-  accentText: { default: "#ffffff", [DARK]: "#0b1220" },
-  accentSubtle: { default: "rgba(37, 99, 235, 0.1)", [DARK]: "rgba(96, 165, 250, 0.15)" },
-  danger: { default: "#dc2626", [DARK]: "#f87171" },
-  success: { default: "#16a34a", [DARK]: "#4ade80" },
-  warning: { default: "#d97706", [DARK]: "#fbbf24" },
+  bg: { default: "#ffffff", [DARK]: "#191919" },
+  bgSubtle: { default: "#f8f8f7", [DARK]: "#202020" },
+  bgElevated: { default: "#ffffff", [DARK]: "#252525" },
+  bgHover: { default: "rgba(55, 53, 47, 0.055)", [DARK]: "rgba(255, 255, 255, 0.055)" },
+  bgActive: { default: "rgba(55, 53, 47, 0.085)", [DARK]: "rgba(255, 255, 255, 0.085)" },
+  border: { default: "rgba(55, 53, 47, 0.14)", [DARK]: "#383836" },
+  borderSubtle: { default: "rgba(55, 53, 47, 0.08)", [DARK]: "#2c2c2b" },
+  text: { default: "#37352f", [DARK]: "#f0efed" },
+  textMuted: { default: "#787774", [DARK]: "#ada9a3" },
+  textSubtle: { default: "#9b9a97", [DARK]: "#7d7a75" },
+  accent: { default: "#2383e2", [DARK]: "#4e94ec" },
+  accentText: { default: "#ffffff", [DARK]: "#191919" },
+  accentSubtle: { default: "rgba(35, 131, 226, 0.1)", [DARK]: "rgba(78, 148, 236, 0.16)" },
+  danger: { default: "#d44c47", [DARK]: "#eb5757" },
+  success: { default: "#448361", [DARK]: "#4dab9a" },
+  warning: { default: "#d9730d", [DARK]: "#ffa344" },
 });
 
 export const space = stylex.defineVars({
@@ -39,7 +39,7 @@ export const radius = stylex.defineVars({
 });
 
 export const font = stylex.defineVars({
-  sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif',
+  sans: 'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Inter, Roboto, sans-serif',
   mono: '"JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace',
   sizeXs: "12px",
   sizeSm: "13px",
@@ -49,9 +49,16 @@ export const font = stylex.defineVars({
 });
 
 export const shadow = stylex.defineVars({
-  sm: { default: "0 1px 2px rgba(0, 0, 0, 0.05)", [DARK]: "0 1px 2px rgba(0, 0, 0, 0.4)" },
-  md: { default: "0 4px 12px rgba(0, 0, 0, 0.08)", [DARK]: "0 4px 14px rgba(0, 0, 0, 0.5)" },
-  lg: { default: "0 12px 32px rgba(0, 0, 0, 0.12)", [DARK]: "0 12px 32px rgba(0, 0, 0, 0.65)" },
+  sm: { default: "0 1px 2px rgba(15, 15, 15, 0.05)", [DARK]: "0 1px 2px rgba(0, 0, 0, 0.35)" },
+  md: {
+    default: "0 0 0 1px rgba(15, 15, 15, 0.06), 0 8px 20px rgba(15, 15, 15, 0.1)",
+    [DARK]:
+      "0 0 0 1px #383836, 0 14px 28px -6px rgba(0, 0, 0, 0.38), 0 2px 4px -1px rgba(0, 0, 0, 0.22)",
+  },
+  lg: {
+    default: "0 0 0 1px rgba(15, 15, 15, 0.06), 0 18px 40px rgba(15, 15, 15, 0.16)",
+    [DARK]: "0 0 0 1px #383836, 0 20px 44px rgba(0, 0, 0, 0.55)",
+  },
 });
 
 export const zIndex = stylex.defineVars({
@@ -64,38 +71,38 @@ export const zIndex = stylex.defineVars({
 
 export const lightTheme = stylex.createTheme(colors, {
   bg: "#ffffff",
-  bgSubtle: "#f7f7f5",
+  bgSubtle: "#f8f8f7",
   bgElevated: "#ffffff",
-  bgHover: "rgba(15, 23, 42, 0.05)",
-  bgActive: "rgba(15, 23, 42, 0.09)",
-  border: "#e4e4e0",
-  borderSubtle: "#efefec",
-  text: "#18181b",
-  textMuted: "#52525b",
-  textSubtle: "#8c8c94",
-  accent: "#2563eb",
+  bgHover: "rgba(55, 53, 47, 0.055)",
+  bgActive: "rgba(55, 53, 47, 0.085)",
+  border: "rgba(55, 53, 47, 0.14)",
+  borderSubtle: "rgba(55, 53, 47, 0.08)",
+  text: "#37352f",
+  textMuted: "#787774",
+  textSubtle: "#9b9a97",
+  accent: "#2383e2",
   accentText: "#ffffff",
-  accentSubtle: "rgba(37, 99, 235, 0.1)",
-  danger: "#dc2626",
-  success: "#16a34a",
-  warning: "#d97706",
+  accentSubtle: "rgba(35, 131, 226, 0.1)",
+  danger: "#d44c47",
+  success: "#448361",
+  warning: "#d9730d",
 });
 
 export const darkTheme = stylex.createTheme(colors, {
-  bg: "#111215",
-  bgSubtle: "#18191d",
-  bgElevated: "#1f2026",
-  bgHover: "rgba(255, 255, 255, 0.06)",
-  bgActive: "rgba(255, 255, 255, 0.11)",
-  border: "#2c2e36",
-  borderSubtle: "#23252c",
-  text: "#eceef2",
-  textMuted: "#a1a6b3",
-  textSubtle: "#6e7380",
-  accent: "#60a5fa",
-  accentText: "#0b1220",
-  accentSubtle: "rgba(96, 165, 250, 0.15)",
-  danger: "#f87171",
-  success: "#4ade80",
-  warning: "#fbbf24",
+  bg: "#191919",
+  bgSubtle: "#202020",
+  bgElevated: "#252525",
+  bgHover: "rgba(255, 255, 255, 0.055)",
+  bgActive: "rgba(255, 255, 255, 0.085)",
+  border: "#383836",
+  borderSubtle: "#2c2c2b",
+  text: "#f0efed",
+  textMuted: "#ada9a3",
+  textSubtle: "#7d7a75",
+  accent: "#4e94ec",
+  accentText: "#191919",
+  accentSubtle: "rgba(78, 148, 236, 0.16)",
+  danger: "#eb5757",
+  success: "#4dab9a",
+  warning: "#ffa344",
 });

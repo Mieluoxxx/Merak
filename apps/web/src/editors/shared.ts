@@ -28,10 +28,21 @@ export const NODE_TYPE_META: Record<NodeType, NodeTypeMeta> = {
     shortLabel: "Canvas",
     defaultChildTitle: "Untitled Canvas",
   },
+  folder: {
+    label: "Folder",
+    shortLabel: "Folder",
+    defaultChildTitle: "Untitled Folder",
+  },
 };
 
 export function isNodeType(value: unknown): value is NodeType {
-  return value === "doc" || value === "excalidraw" || value === "html" || value === "canvas";
+  return (
+    value === "doc" ||
+    value === "excalidraw" ||
+    value === "html" ||
+    value === "canvas" ||
+    value === "folder"
+  );
 }
 
 export function formatMediaUrl(media: Pick<MediaDto, "id" | "url">): string {

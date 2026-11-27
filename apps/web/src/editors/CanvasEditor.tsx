@@ -21,15 +21,14 @@ import {
   Input,
   Stack,
   Textarea,
-  Toolbar,
 } from "@merak/ui";
 import { colors, font, radius, shadow, space } from "@merak/ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import {
   addEdge,
   Background,
+  BackgroundVariant,
   type Connection,
-  Controls,
   Handle,
   MarkerType,
   MiniMap,
@@ -41,27 +40,30 @@ import {
   Position,
   ReactFlow,
   ReactFlowProvider,
+  SelectionMode,
+  useReactFlow,
   useViewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
   Blocks,
-  BoxSelect,
   ExternalLink,
   FileCode2,
   FileText,
+  Folder,
   Image as ImageIcon,
   Link2,
   Maximize2,
   Minimize2,
   Network,
   PenTool,
-  Save,
   StickyNote,
-  Upload,
 } from "lucide-react";
 import {
   type ChangeEvent,
+  type ClipboardEvent as ReactClipboardEvent,
+  type DragEvent as ReactDragEvent,
+  type MouseEvent as ReactMouseEvent,
   createContext,
   useCallback,
   useContext,
@@ -70,6 +72,13 @@ import {
   useRef,
   useState,
 } from "react";
+import { CanvasFloatingChrome, type CanvasInteractionMode } from "./CanvasFloatingChrome.js";
+import {
+  CanvasContextMenu,
+  type CanvasContextTarget,
+  CanvasMultiSelectBar,
+  CanvasNodeActionPill,
+} from "./CanvasOverlays.js";
 import {
   CANVAS_LOD_ZOOM_THRESHOLD,
   type CanvasFileFlowData,
@@ -83,6 +92,20 @@ import {
   parseCanvasContent,
   shouldActivateCanvasLod,
 } from "./canvasHelpers.js";
+import {
+  type CanvasGridMode,
+  type CanvasHistoryState,
+  createCanvasHistory,
+  createGroupForNodes,
+  duplicateCanvasSelection,
+  loadCanvasGridMode,
+  pushCanvasHistory,
+  redoCanvasHistory,
+  resolveCanvasNodeColor,
+  saveCanvasGridMode,
+  undoCanvasHistory,
+  ungroupNode,
+} from "./canvasOps.js";
 import "./editors.css";
 import { countActiveExcalidrawElements, parseExcalidrawContent } from "./excalidrawHelpers.js";
 import { extractDocExcerpt } from "./markdownHelpers.js";
@@ -90,23 +113,32 @@ import { formatMediaUrl, NODE_TYPE_META, useGlobalSaveShortcut } from "./shared.
 
 interface CanvasEditorContextValue {
   readOnly: boolean;
+  selectedNodeCount: number;
   activatedNodeId: string | null;
   setActivatedNodeId: (id: string | null) => void;
   updateNodeData: (nodeId: string, updater: (node: MerakFlowNode) => MerakFlowNode) => void;
+  onDuplicateNode: (nodeId: string) => void;
+  onDeleteNode: (nodeId: string) => void;
+  onUngroupNode: (nodeId: string) => void;
   onOpenNode: (nodeId: string) => void;
   resolveNode?: (nodeId: string) => Promise<NodeDetailDto | null>;
 }
 
 const CanvasEditorContext = createContext<CanvasEditorContextValue>({
   readOnly: false,
+  selectedNodeCount: 0,
   activatedNodeId: null,
   setActivatedNodeId: () => {},
   updateNodeData: () => {},
+  onDuplicateNode: () => {},
+  onDeleteNode: () => {},
+  onUngroupNode: () => {},
   onOpenNode: () => {},
 });
 
 const styles = stylex.create({
   root: {
+    position: "relative",
     display: "flex",
     flexDirection: "column",
     height: "100%",
@@ -114,36 +146,25 @@ const styles = stylex.create({
     backgroundColor: colors.bg,
     color: colors.text,
     fontFamily: font.sans,
-    border: `1px solid ${colors.border}`,
-    borderRadius: radius.lg,
+    borderWidth: 0,
+    borderRadius: 0,
     overflow: "hidden",
-  },
-  toolbar: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
-    gap: space.sm,
-    paddingBlock: space.sm,
-    paddingInline: space.md,
-    backgroundColor: colors.bgSubtle,
-    borderBottom: `1px solid ${colors.border}`,
-  },
-  titleText: {
-    fontSize: font.sizeSm,
-    fontWeight: 600,
-    color: colors.text,
-    maxWidth: "220px",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   flowWrap: {
-    flex: 1,
+    flex: "1 1 auto",
     minHeight: 0,
     position: "relative",
     width: "100%",
-    backgroundColor: colors.bg,
+    height: "100%",
+  },
+  emptyOverlay: {
+    position: "absolute",
+    inset: 0,
+    pointerEvents: "none",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 5,
   },
   hiddenInput: {
     display: "none",
@@ -154,7 +175,9 @@ const styles = stylex.create({
     width: "100%",
     height: "100%",
     backgroundColor: colors.bgElevated,
-    border: `1px solid ${colors.border}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.border,
     borderRadius: radius.md,
     boxShadow: shadow.sm,
     overflow: "hidden",
@@ -167,50 +190,88 @@ const styles = stylex.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: space.xs,
-    paddingBlock: space.xs,
-    paddingInline: space.sm,
+    paddingTop: space.xs,
+    paddingBottom: space.xs,
+    paddingLeft: space.sm,
+    paddingRight: space.sm,
     backgroundColor: colors.bgSubtle,
-    borderBottom: `1px solid ${colors.borderSubtle}`,
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: colors.borderSubtle,
     fontSize: font.sizeXs,
     fontWeight: 600,
     color: colors.textMuted,
   },
   textBody: {
-    flex: 1,
+    flex: "1 1 auto",
     minHeight: 0,
     display: "flex",
-    padding: space.xs,
+    paddingTop: space.xs,
+    paddingBottom: space.xs,
+    paddingLeft: space.xs,
+    paddingRight: space.xs,
+  },
+  textPreview: {
+    width: "100%",
+    height: "100%",
+    overflowY: "auto",
+    paddingTop: space.xs,
+    paddingBottom: space.xs,
+    paddingLeft: space.xs,
+    paddingRight: space.xs,
+    fontFamily: font.sans,
+    fontSize: font.sizeSm,
+    lineHeight: 1.5,
+    color: colors.text,
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+    userSelect: "none",
+  },
+  textPlaceholder: {
+    color: colors.textSubtle,
   },
   textarea: {
     width: "100%",
     height: "100%",
     resize: "none",
-    border: "none",
+    borderWidth: 0,
     backgroundColor: "transparent",
     color: colors.text,
     fontFamily: font.sans,
     fontSize: font.sizeSm,
     lineHeight: 1.5,
-    padding: space.xs,
-    outline: "none",
+    paddingTop: space.xs,
+    paddingBottom: space.xs,
+    paddingLeft: space.xs,
+    paddingRight: space.xs,
+    outlineStyle: "none",
   },
   groupNode: {
     width: "100%",
     height: "100%",
     borderRadius: radius.lg,
-    border: `2px dashed ${colors.border}`,
+    borderWidth: "1.5px",
+    borderStyle: "dashed",
+    borderColor: colors.border,
     backgroundColor: colors.accentSubtle,
-    padding: space.sm,
+    paddingTop: space.sm,
+    paddingBottom: space.sm,
+    paddingLeft: space.sm,
+    paddingRight: space.sm,
     display: "flex",
     flexDirection: "column",
     alignItems: "flex-start",
   },
   groupLabelInput: {
     backgroundColor: colors.bgElevated,
-    border: `1px solid ${colors.border}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.border,
     borderRadius: radius.sm,
-    paddingBlock: space.xxs,
-    paddingInline: space.sm,
+    paddingTop: space.xxs,
+    paddingBottom: space.xxs,
+    paddingLeft: space.sm,
+    paddingRight: space.sm,
     fontSize: font.sizeXs,
     fontWeight: 600,
     color: colors.text,
@@ -221,18 +282,23 @@ const styles = stylex.create({
     width: "100%",
     height: "100%",
     backgroundColor: colors.bgElevated,
-    border: `1px solid ${colors.border}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.border,
     borderRadius: radius.md,
     boxShadow: shadow.sm,
     overflow: "hidden",
   },
   linkBody: {
-    flex: 1,
+    flex: "1 1 auto",
     display: "flex",
     flexDirection: "column",
     justifyContent: "space-between",
     gap: space.sm,
-    padding: space.sm,
+    paddingTop: space.sm,
+    paddingBottom: space.sm,
+    paddingLeft: space.sm,
+    paddingRight: space.sm,
   },
   linkAnchor: {
     color: colors.accent,
@@ -247,16 +313,21 @@ const styles = stylex.create({
     width: "100%",
     height: "100%",
     backgroundColor: colors.bgElevated,
-    border: `1px solid ${colors.border}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.border,
     borderRadius: radius.md,
     boxShadow: shadow.sm,
     overflow: "hidden",
   },
   fileBody: {
-    flex: 1,
+    flex: "1 1 auto",
     minHeight: 0,
     overflowY: "auto",
-    padding: space.sm,
+    paddingTop: space.sm,
+    paddingBottom: space.sm,
+    paddingLeft: space.sm,
+    paddingRight: space.sm,
     display: "flex",
     flexDirection: "column",
     gap: space.xs,
@@ -272,10 +343,12 @@ const styles = stylex.create({
   fileSubtle: {
     fontSize: font.sizeXs,
     color: colors.textSubtle,
-    margin: 0,
+    marginTop: 0,
+    marginBottom: 0,
   },
   filePreviewText: {
-    margin: 0,
+    marginTop: 0,
+    marginBottom: 0,
     fontSize: font.sizeXs,
     lineHeight: 1.5,
     color: colors.textMuted,
@@ -286,7 +359,9 @@ const styles = stylex.create({
     height: "92px",
     objectFit: "cover",
     borderRadius: radius.sm,
-    border: `1px solid ${colors.borderSubtle}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.borderSubtle,
   },
   mediaFull: {
     width: "100%",
@@ -309,19 +384,26 @@ const styles = stylex.create({
     width: "min(440px, calc(100vw - 32px))",
     backgroundColor: colors.bgElevated,
     color: colors.text,
-    border: `1px solid ${colors.border}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.border,
     borderRadius: radius.lg,
     boxShadow: shadow.lg,
-    padding: space.xl,
+    paddingTop: space.xl,
+    paddingBottom: space.xl,
+    paddingLeft: space.xl,
+    paddingRight: space.xl,
     zIndex: 310,
   },
   dialogTitle: {
-    margin: 0,
+    marginTop: 0,
+    marginBottom: 0,
     fontSize: font.sizeLg,
     fontWeight: 600,
   },
   dialogDesc: {
-    margin: 0,
+    marginTop: 0,
+    marginBottom: 0,
     fontSize: font.sizeSm,
     color: colors.textMuted,
   },
@@ -332,6 +414,12 @@ const styles = stylex.create({
     marginTop: space.md,
   },
 });
+
+function isTextInputElement(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
+}
 
 function FourSideHandles() {
   return (
@@ -349,46 +437,146 @@ function FourSideHandles() {
 }
 
 function CanvasTextNodeComponent({ id, data, selected }: NodeProps<MerakFlowNode>) {
-  const { readOnly, updateNodeData } = useContext(CanvasEditorContext);
+  const {
+    readOnly,
+    selectedNodeCount,
+    updateNodeData,
+    onDuplicateNode,
+    onDeleteNode,
+  } = useContext(CanvasEditorContext);
   const textData = data as CanvasTextFlowData;
+  const [isEditing, setIsEditing] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!selected) {
+      setIsEditing(false);
+    }
+  }, [selected]);
+
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus();
+      const len = textareaRef.current.value.length;
+      textareaRef.current.setSelectionRange(len, len);
+    }
+  }, [isEditing]);
+
+  const colorTheme = resolveCanvasNodeColor(textData.color);
+  const showToolbar = Boolean(selected && selectedNodeCount === 1 && !readOnly);
 
   return (
-    <div {...stylex.props(styles.textNode, selected && styles.nodeSelected)}>
+    <div
+      style={colorTheme ? { borderColor: colorTheme.border } : undefined}
+      onDoubleClick={(event) => {
+        if (readOnly) return;
+        event.stopPropagation();
+        setIsEditing(true);
+      }}
+      {...stylex.props(styles.textNode, selected && styles.nodeSelected)}
+    >
+      <CanvasNodeActionPill
+        isVisible={showToolbar}
+        currentColor={textData.color}
+        isGroup={false}
+        onSelectColor={(color) => {
+          updateNodeData(id, (node) => ({
+            ...node,
+            data: { ...(node.data as CanvasTextFlowData), color },
+          }));
+        }}
+        onDuplicate={() => onDuplicateNode(id)}
+        onDelete={() => onDeleteNode(id)}
+      />
       <NodeResizer isVisible={Boolean(selected && !readOnly)} minWidth={180} minHeight={100} />
       <FourSideHandles />
-      <div {...stylex.props(styles.nodeHeader)}>
+      <div
+        style={colorTheme ? { backgroundColor: colorTheme.tint } : undefined}
+        {...stylex.props(styles.nodeHeader)}
+      >
         <Inline gap="xs">
           <StickyNote size={13} />
           <span>Note</span>
         </Inline>
       </div>
-      <div className="nodrag nopan" {...stylex.props(styles.textBody)}>
-        <Textarea
-          value={textData.text}
-          readOnly={readOnly}
-          placeholder="Write a note..."
-          onValueChange={(nextText) => {
-            updateNodeData(id, (node) => ({
-              ...node,
-              data: {
-                ...(node.data as CanvasTextFlowData),
-                text: nextText,
-              },
-            }));
-          }}
-          {...stylex.props(styles.textarea)}
-        />
+      <div
+        className={isEditing ? "nodrag nopan" : undefined}
+        {...stylex.props(styles.textBody)}
+      >
+        {isEditing && !readOnly ? (
+          <Textarea
+            ref={textareaRef}
+            value={textData.text}
+            placeholder="Write a note..."
+            onBlur={() => setIsEditing(false)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.stopPropagation();
+                setIsEditing(false);
+              }
+            }}
+            onValueChange={(nextText) => {
+              updateNodeData(id, (node) => ({
+                ...node,
+                data: {
+                  ...(node.data as CanvasTextFlowData),
+                  text: nextText,
+                },
+              }));
+            }}
+            {...stylex.props(styles.textarea)}
+          />
+        ) : (
+          <div
+            {...stylex.props(
+              styles.textPreview,
+              textData.text.trim().length === 0 && styles.textPlaceholder,
+            )}
+          >
+            {textData.text.trim().length > 0 ? textData.text : "Double-click to edit text"}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 function CanvasGroupNodeComponent({ id, data, selected }: NodeProps<MerakFlowNode>) {
-  const { readOnly, updateNodeData } = useContext(CanvasEditorContext);
+  const {
+    readOnly,
+    selectedNodeCount,
+    updateNodeData,
+    onUngroupNode,
+    onDuplicateNode,
+    onDeleteNode,
+  } = useContext(CanvasEditorContext);
   const groupData = data as CanvasGroupFlowData;
+  const colorTheme = resolveCanvasNodeColor(groupData.color);
+  const showToolbar = Boolean(selected && selectedNodeCount === 1 && !readOnly);
 
   return (
-    <div {...stylex.props(styles.groupNode, selected && styles.nodeSelected)}>
+    <div
+      style={
+        colorTheme
+          ? { borderColor: colorTheme.border, backgroundColor: colorTheme.tint }
+          : undefined
+      }
+      {...stylex.props(styles.groupNode, selected && styles.nodeSelected)}
+    >
+      <CanvasNodeActionPill
+        isVisible={showToolbar}
+        currentColor={groupData.color}
+        isGroup
+        onSelectColor={(color) => {
+          updateNodeData(id, (node) => ({
+            ...node,
+            data: { ...(node.data as CanvasGroupFlowData), color },
+          }));
+        }}
+        onUngroup={() => onUngroupNode(id)}
+        onDuplicate={() => onDuplicateNode(id)}
+        onDelete={() => onDeleteNode(id)}
+      />
       <NodeResizer isVisible={Boolean(selected && !readOnly)} minWidth={240} minHeight={160} />
       <FourSideHandles />
       <div className="nodrag nopan">
@@ -413,8 +601,16 @@ function CanvasGroupNodeComponent({ id, data, selected }: NodeProps<MerakFlowNod
 }
 
 function CanvasLinkNodeComponent({ id, data, selected }: NodeProps<MerakFlowNode>) {
-  const { readOnly, updateNodeData } = useContext(CanvasEditorContext);
+  const {
+    readOnly,
+    selectedNodeCount,
+    updateNodeData,
+    onDuplicateNode,
+    onDeleteNode,
+  } = useContext(CanvasEditorContext);
   const linkData = data as CanvasLinkFlowData;
+  const colorTheme = resolveCanvasNodeColor(linkData.color);
+  const showToolbar = Boolean(selected && selectedNodeCount === 1 && !readOnly);
 
   let hostname = linkData.url;
   try {
@@ -424,10 +620,29 @@ function CanvasLinkNodeComponent({ id, data, selected }: NodeProps<MerakFlowNode
   }
 
   return (
-    <div {...stylex.props(styles.linkNode, selected && styles.nodeSelected)}>
+    <div
+      style={colorTheme ? { borderColor: colorTheme.border } : undefined}
+      {...stylex.props(styles.linkNode, selected && styles.nodeSelected)}
+    >
+      <CanvasNodeActionPill
+        isVisible={showToolbar}
+        currentColor={linkData.color}
+        isGroup={false}
+        onSelectColor={(color) => {
+          updateNodeData(id, (node) => ({
+            ...node,
+            data: { ...(node.data as CanvasLinkFlowData), color },
+          }));
+        }}
+        onDuplicate={() => onDuplicateNode(id)}
+        onDelete={() => onDeleteNode(id)}
+      />
       <NodeResizer isVisible={Boolean(selected && !readOnly)} minWidth={200} minHeight={110} />
       <FourSideHandles />
-      <div {...stylex.props(styles.nodeHeader)}>
+      <div
+        style={colorTheme ? { backgroundColor: colorTheme.tint } : undefined}
+        {...stylex.props(styles.nodeHeader)}
+      >
         <Inline gap="xs">
           <Link2 size={13} />
           <span>Link</span>
@@ -465,8 +680,17 @@ function CanvasLinkNodeComponent({ id, data, selected }: NodeProps<MerakFlowNode
 }
 
 function CanvasFileNodeComponent({ id, data, selected }: NodeProps<MerakFlowNode>) {
-  const { activatedNodeId, setActivatedNodeId, onOpenNode, resolveNode } =
-    useContext(CanvasEditorContext);
+  const {
+    readOnly,
+    selectedNodeCount,
+    activatedNodeId,
+    setActivatedNodeId,
+    updateNodeData,
+    onDuplicateNode,
+    onDeleteNode,
+    onOpenNode,
+    resolveNode,
+  } = useContext(CanvasEditorContext);
   const { zoom } = useViewport();
   const fileData = data as CanvasFileFlowData;
 
@@ -512,6 +736,7 @@ function CanvasFileNodeComponent({ id, data, selected }: NodeProps<MerakFlowNode
       : "File";
 
   const renderIcon = () => {
+    if (resolved?.type === "folder") return <Folder size={14} />;
     if (resolved?.type === "excalidraw") return <PenTool size={14} />;
     if (resolved?.type === "html") return <Blocks size={14} />;
     if (resolved?.type === "canvas") return <Network size={14} />;
@@ -556,7 +781,9 @@ function CanvasFileNodeComponent({ id, data, selected }: NodeProps<MerakFlowNode
       }
 
       let snippet = "";
-      if (resolved.type === "doc") {
+      if (resolved.type === "folder") {
+        snippet = "Workspace folder — open to browse nested subfolders and assets.";
+      } else if (resolved.type === "doc") {
         snippet = extractDocExcerpt(resolved.content, 180);
       } else if (resolved.type === "excalidraw") {
         const count = countActiveExcalidrawElements(parseExcalidrawContent(resolved.content));
@@ -593,8 +820,12 @@ function CanvasFileNodeComponent({ id, data, selected }: NodeProps<MerakFlowNode
     );
   };
 
+  const colorTheme = resolveCanvasNodeColor(fileData.color);
+  const showToolbar = Boolean(selected && selectedNodeCount === 1 && !readOnly);
+
   return (
     <div
+      style={colorTheme ? { borderColor: colorTheme.border } : undefined}
       onClick={() => {
         if (zoom >= CANVAS_LOD_ZOOM_THRESHOLD) {
           setActivatedNodeId(id);
@@ -606,9 +837,25 @@ function CanvasFileNodeComponent({ id, data, selected }: NodeProps<MerakFlowNode
       }}
       {...stylex.props(styles.fileNode, selected && styles.nodeSelected)}
     >
-      <NodeResizer isVisible={Boolean(selected)} minWidth={220} minHeight={120} />
+      <CanvasNodeActionPill
+        isVisible={showToolbar}
+        currentColor={fileData.color}
+        isGroup={false}
+        onSelectColor={(color) => {
+          updateNodeData(id, (node) => ({
+            ...node,
+            data: { ...(node.data as CanvasFileFlowData), color },
+          }));
+        }}
+        onDuplicate={() => onDuplicateNode(id)}
+        onDelete={() => onDeleteNode(id)}
+      />
+      <NodeResizer isVisible={Boolean(selected && !readOnly)} minWidth={220} minHeight={120} />
       <FourSideHandles />
-      <div {...stylex.props(styles.nodeHeader)}>
+      <div
+        style={colorTheme ? { backgroundColor: colorTheme.tint } : undefined}
+        {...stylex.props(styles.nodeHeader)}
+      >
         <Inline gap="xs">
           {renderIcon()}
           <Badge tone={isLodActive ? "accent" : "neutral"}>{kindLabel}</Badge>
@@ -669,16 +916,29 @@ function CanvasEditorInner({
   onOpenNode,
   resolveNode,
 }: AssetEditorProps) {
+  const { fitView, zoomTo, screenToFlowPosition } = useReactFlow<MerakFlowNode, MerakFlowEdge>();
+  const { zoom } = useViewport();
+
   const initialFlow = useMemo(
     () => canvasDocumentToFlow(parseCanvasContent(node.content)),
     [node.id],
+  );
+  const initialSerialized = useMemo(
+    () => JSON.stringify(flowToCanvasDocument(initialFlow.nodes, initialFlow.edges), null, 2),
+    [initialFlow],
   );
 
   const [nodes, setNodes] = useState<MerakFlowNode[]>(initialFlow.nodes);
   const [edges, setEdges] = useState<MerakFlowEdge[]>(initialFlow.edges);
   const [activatedNodeId, setActivatedNodeId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  const [interactionMode, setInteractionMode] = useState<CanvasInteractionMode>("select");
+  const [spacePanning, setSpacePanning] = useState(false);
+  const [gridMode, setGridMode] = useState<CanvasGridMode>(() => loadCanvasGridMode());
+  const [minimapOpen, setMinimapOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<CanvasContextTarget | null>(null);
 
   const [embedDialogOpen, setEmbedDialogOpen] = useState(false);
   const [embedNodeId, setEmbedNodeId] = useState("");
@@ -687,7 +947,12 @@ function CanvasEditorInner({
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("https://");
 
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const flowWrapRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const isPointerInsideRef = useRef(false);
+  const isNodeDraggingRef = useRef(false);
+
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
   const edgesRef = useRef(edges);
@@ -699,10 +964,20 @@ function CanvasEditorInner({
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
 
-  const lastSerializedRef = useRef<string>(
-    JSON.stringify(flowToCanvasDocument(initialFlow.nodes, initialFlow.edges), null, 2),
-  );
+  const lastSerializedRef = useRef<string>(initialSerialized);
   const lastNodeIdRef = useRef(node.id);
+  const historyRef = useRef<CanvasHistoryState>(createCanvasHistory(initialSerialized));
+  const [historyMeta, setHistoryMeta] = useState(() => ({
+    canUndo: false,
+    canRedo: false,
+  }));
+
+  const syncHistoryMeta = useCallback((state: CanvasHistoryState) => {
+    setHistoryMeta({
+      canUndo: state.past.length > 0,
+      canRedo: state.future.length > 0,
+    });
+  }, []);
 
   // Re-hydrate when switching to a different canvas node.
   useEffect(() => {
@@ -710,36 +985,111 @@ function CanvasEditorInner({
       lastNodeIdRef.current = node.id;
       const parsed = parseCanvasContent(node.content);
       const nextFlow = canvasDocumentToFlow(parsed);
+      const serialized = JSON.stringify(parsed, null, 2);
       setNodes(nextFlow.nodes);
       setEdges(nextFlow.edges);
       setActivatedNodeId(null);
+      setContextMenu(null);
       nodesRef.current = nextFlow.nodes;
       edgesRef.current = nextFlow.edges;
-      lastSerializedRef.current = JSON.stringify(parsed, null, 2);
+      lastSerializedRef.current = serialized;
+      historyRef.current = createCanvasHistory(serialized);
+      syncHistoryMeta(historyRef.current);
     }
-  }, [node.id, node.content]);
+  }, [node.id, node.content, syncHistoryMeta]);
 
   const emitCanvasIfChanged = useCallback(
-    (nextNodes: readonly MerakFlowNode[], nextEdges: readonly MerakFlowEdge[]) => {
+    (
+      nextNodes: readonly MerakFlowNode[],
+      nextEdges: readonly MerakFlowEdge[],
+      recordHistory = true,
+    ) => {
       if (readOnly) return;
       const serialized = JSON.stringify(flowToCanvasDocument(nextNodes, nextEdges), null, 2);
       if (serialized !== lastSerializedRef.current) {
         lastSerializedRef.current = serialized;
         onChangeRef.current(serialized);
+        if (recordHistory) {
+          historyRef.current = pushCanvasHistory(historyRef.current, serialized);
+          syncHistoryMeta(historyRef.current);
+        }
+      }
+    },
+    [readOnly, syncHistoryMeta],
+  );
+
+  const commitCanvasState = useCallback(
+    (
+      nextNodes: MerakFlowNode[],
+      nextEdges: MerakFlowEdge[],
+      recordHistory = true,
+    ) => {
+      nodesRef.current = nextNodes;
+      edgesRef.current = nextEdges;
+      setNodes(nextNodes);
+      setEdges(nextEdges);
+      emitCanvasIfChanged(nextNodes, nextEdges, recordHistory);
+    },
+    [emitCanvasIfChanged],
+  );
+
+  const applyHistorySnapshot = useCallback(
+    (snapshot: string) => {
+      const parsed = parseCanvasContent(snapshot);
+      const nextFlow = canvasDocumentToFlow(parsed);
+      nodesRef.current = nextFlow.nodes;
+      edgesRef.current = nextFlow.edges;
+      setNodes(nextFlow.nodes);
+      setEdges(nextFlow.edges);
+      setActivatedNodeId(null);
+      lastSerializedRef.current = snapshot;
+      if (!readOnly) {
+        onChangeRef.current(snapshot);
       }
     },
     [readOnly],
   );
+
+  const handleUndo = useCallback(() => {
+    if (readOnly || historyRef.current.past.length === 0) return;
+    historyRef.current = undoCanvasHistory(historyRef.current);
+    syncHistoryMeta(historyRef.current);
+    applyHistorySnapshot(historyRef.current.present);
+  }, [applyHistorySnapshot, readOnly, syncHistoryMeta]);
+
+  const handleRedo = useCallback(() => {
+    if (readOnly || historyRef.current.future.length === 0) return;
+    historyRef.current = redoCanvasHistory(historyRef.current);
+    syncHistoryMeta(historyRef.current);
+    applyHistorySnapshot(historyRef.current.present);
+  }, [applyHistorySnapshot, readOnly, syncHistoryMeta]);
 
   const handleNodesChange: OnNodesChange<MerakFlowNode> = useCallback(
     (changes) => {
       const nextNodes = changes.applyTo(nodesRef.current);
       nodesRef.current = nextNodes;
       setNodes(nextNodes);
-      emitCanvasIfChanged(nextNodes, edgesRef.current);
+      emitCanvasIfChanged(nextNodes, edgesRef.current, !isNodeDraggingRef.current);
     },
     [emitCanvasIfChanged],
   );
+
+  const handleNodeDragStart = useCallback(() => {
+    isNodeDraggingRef.current = true;
+  }, []);
+
+  const handleNodeDragStop = useCallback(() => {
+    if (!isNodeDraggingRef.current || readOnly) return;
+    isNodeDraggingRef.current = false;
+    const serialized = JSON.stringify(
+      flowToCanvasDocument(nodesRef.current, edgesRef.current),
+      null,
+      2,
+    );
+    lastSerializedRef.current = serialized;
+    historyRef.current = pushCanvasHistory(historyRef.current, serialized);
+    syncHistoryMeta(historyRef.current);
+  }, [readOnly, syncHistoryMeta]);
 
   const handleEdgesChange: OnEdgesChange<MerakFlowEdge> = useCallback(
     (changes) => {
@@ -784,10 +1134,13 @@ function CanvasEditorInner({
 
   const appendNode = useCallback(
     (nextNode: MerakFlowNode) => {
+      const selectedCleared = nodesRef.current.map((n) =>
+        n.selected ? { ...n, selected: false } : n,
+      );
       const nextNodes =
         nextNode.type === "canvasGroup"
-          ? [nextNode, ...nodesRef.current]
-          : [...nodesRef.current, nextNode];
+          ? [{ ...nextNode, selected: true }, ...selectedCleared]
+          : [...selectedCleared, { ...nextNode, selected: true }];
       nodesRef.current = nextNodes;
       setNodes(nextNodes);
       emitCanvasIfChanged(nextNodes, edgesRef.current);
@@ -795,41 +1148,82 @@ function CanvasEditorInner({
     [emitCanvasIfChanged],
   );
 
-  const nextSpawnPosition = () => {
-    const offset = (nodesRef.current.length % 8) * 32;
-    return { x: 80 + offset, y: 80 + offset };
-  };
+  const nextSpawnPosition = useCallback(
+    (width = 280, height = 160): { x: number; y: number } => {
+      const cascade = (nodesRef.current.length % 6) * 24;
+      const rect = flowWrapRef.current?.getBoundingClientRect();
+      if (rect && rect.width > 0 && rect.height > 0) {
+        const center = screenToFlowPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        });
+        return {
+          x: Math.round(center.x - width / 2 + cascade),
+          y: Math.round(center.y - height / 2 + cascade),
+        };
+      }
+      return { x: 100 + cascade, y: 100 + cascade };
+    },
+    [screenToFlowPosition],
+  );
 
-  const handleAddTextNote = () => {
-    appendNode({
-      id: makeNodeId("text"),
-      type: "canvasText",
-      position: nextSpawnPosition(),
-      width: 280,
-      height: 160,
-      style: { width: 280, height: 160 },
-      data: {
-        canvasType: "text",
-        text: "New note",
-      },
-    });
-  };
+  const handleAddTextNoteAt = useCallback(
+    (x?: number, y?: number, initialText = "New note") => {
+      const pos = x !== undefined && y !== undefined ? { x: Math.round(x), y: Math.round(y) } : nextSpawnPosition(280, 160);
+      appendNode({
+        id: makeNodeId("text"),
+        type: "canvasText",
+        position: pos,
+        width: 280,
+        height: 160,
+        style: { width: 280, height: 160 },
+        data: {
+          canvasType: "text",
+          text: initialText,
+        },
+      });
+    },
+    [appendNode, nextSpawnPosition],
+  );
 
-  const handleAddGroup = () => {
-    appendNode({
-      id: makeNodeId("group"),
-      type: "canvasGroup",
-      zIndex: -1,
-      position: nextSpawnPosition(),
-      width: 440,
-      height: 300,
-      style: { width: 440, height: 300 },
-      data: {
-        canvasType: "group",
-        label: "Group",
-      },
-    });
-  };
+  const handleAddGroupAt = useCallback(
+    (x?: number, y?: number) => {
+      const pos = x !== undefined && y !== undefined ? { x: Math.round(x), y: Math.round(y) } : nextSpawnPosition(440, 300);
+      appendNode({
+        id: makeNodeId("group"),
+        type: "canvasGroup",
+        zIndex: -1,
+        position: pos,
+        width: 440,
+        height: 300,
+        style: { width: 440, height: 300 },
+        data: {
+          canvasType: "group",
+          label: "Group",
+        },
+      });
+    },
+    [appendNode, nextSpawnPosition],
+  );
+
+  const handleAddLinkCard = useCallback(
+    (url: string, x?: number, y?: number) => {
+      const pos = x !== undefined && y !== undefined ? { x: Math.round(x), y: Math.round(y) } : nextSpawnPosition(280, 130);
+      appendNode({
+        id: makeNodeId("link"),
+        type: "canvasLink",
+        position: pos,
+        width: 280,
+        height: 130,
+        style: { width: 280, height: 130 },
+        data: {
+          canvasType: "link",
+          url,
+        },
+      });
+    },
+    [appendNode, nextSpawnPosition],
+  );
 
   const handleConfirmEmbedNode = () => {
     const trimmedId = embedNodeId.trim();
@@ -837,7 +1231,7 @@ function CanvasEditorInner({
     appendNode({
       id: makeNodeId("file"),
       type: "canvasFile",
-      position: nextSpawnPosition(),
+      position: nextSpawnPosition(300, 190),
       width: 300,
       height: 190,
       style: { width: 300, height: 190 },
@@ -856,18 +1250,7 @@ function CanvasEditorInner({
     const trimmed = linkUrl.trim();
     try {
       const parsed = new URL(trimmed);
-      appendNode({
-        id: makeNodeId("link"),
-        type: "canvasLink",
-        position: nextSpawnPosition(),
-        width: 280,
-        height: 130,
-        style: { width: 280, height: 130 },
-        data: {
-          canvasType: "link",
-          url: parsed.toString(),
-        },
-      });
+      handleAddLinkCard(parsed.toString());
       setLinkUrl("https://");
       setLinkDialogOpen(false);
     } catch {
@@ -875,61 +1258,355 @@ function CanvasEditorInner({
     }
   };
 
+  const uploadAndAppendImage = useCallback(
+    async (file: File, pos?: { x: number; y: number }) => {
+      if (readOnly) return;
+      setUploading(true);
+      try {
+        const media = await onUploadMedia(file);
+        const mediaUrl = formatMediaUrl(media);
+        appendNode({
+          id: makeNodeId("media"),
+          type: "canvasFile",
+          position: pos ?? nextSpawnPosition(300, 220),
+          width: 300,
+          height: 220,
+          style: { width: 300, height: 220 },
+          data: {
+            canvasType: "file",
+            file: mediaUrl,
+            mediaId: media.id,
+          },
+        });
+      } finally {
+        setUploading(false);
+      }
+    },
+    [appendNode, nextSpawnPosition, onUploadMedia, readOnly],
+  );
+
   const handleUploadImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file || readOnly) return;
-
-    setUploading(true);
-    try {
-      const media = await onUploadMedia(file);
-      const mediaUrl = formatMediaUrl(media);
-      appendNode({
-        id: makeNodeId("media"),
-        type: "canvasFile",
-        position: nextSpawnPosition(),
-        width: 300,
-        height: 220,
-        style: { width: 300, height: 220 },
-        data: {
-          canvasType: "file",
-          file: mediaUrl,
-          mediaId: media.id,
-        },
-      });
-    } finally {
-      setUploading(false);
-    }
+    await uploadAndAppendImage(file);
   };
+
+  const selectedIds = useMemo(
+    () => nodes.filter((item) => item.selected).map((item) => item.id),
+    [nodes],
+  );
+
+  const handleDuplicateIds = useCallback(
+    (ids: readonly string[]) => {
+      if (readOnly || ids.length === 0) return;
+      const duplicated = duplicateCanvasSelection(nodesRef.current, edgesRef.current, ids, makeNodeId);
+      commitCanvasState(duplicated.nodes, duplicated.edges);
+    },
+    [commitCanvasState, readOnly],
+  );
+
+  const handleDeleteIds = useCallback(
+    (ids: readonly string[]) => {
+      if (readOnly) return;
+      const idSet = new Set(ids);
+      const nextNodes = nodesRef.current.filter((item) => !idSet.has(item.id));
+      const nextEdges = edgesRef.current.filter(
+        (edge) => !edge.selected && !idSet.has(edge.source) && !idSet.has(edge.target),
+      );
+      if (nextNodes.length !== nodesRef.current.length || nextEdges.length !== edgesRef.current.length) {
+        commitCanvasState(nextNodes, nextEdges);
+      }
+    },
+    [commitCanvasState, readOnly],
+  );
+
+  const handleGroupSelected = useCallback(() => {
+    if (readOnly) return;
+    const currentSelected = nodesRef.current.filter((n) => n.selected && n.type !== "canvasGroup");
+    if (currentSelected.length < 2) return;
+    const nextNodes = createGroupForNodes(
+      nodesRef.current,
+      currentSelected.map((n) => n.id),
+      makeNodeId("group"),
+    );
+    commitCanvasState(nextNodes, edgesRef.current);
+  }, [commitCanvasState, readOnly]);
+
+  const handleUngroupNode = useCallback(
+    (groupId: string) => {
+      if (readOnly) return;
+      const nextNodes = ungroupNode(nodesRef.current, groupId);
+      if (nextNodes.length !== nodesRef.current.length) {
+        commitCanvasState(nextNodes, edgesRef.current);
+      }
+    },
+    [commitCanvasState, readOnly],
+  );
+
+  const handleClearCanvas = useCallback(() => {
+    if (readOnly || (nodesRef.current.length === 0 && edgesRef.current.length === 0)) return;
+    setActivatedNodeId(null);
+    setContextMenu(null);
+    commitCanvasState([], []);
+  }, [commitCanvasState, readOnly]);
+
+  const handleGridModeChange = useCallback((mode: CanvasGridMode) => {
+    setGridMode(mode);
+    saveCanvasGridMode(mode);
+  }, []);
+
+  const handleFitView = useCallback(() => {
+    void fitView({ padding: 0.2, duration: 240 });
+  }, [fitView]);
+
+  const handleZoomChange = useCallback(
+    (nextZoom: number) => {
+      void zoomTo(Math.min(2.5, Math.max(0.15, nextZoom)), { duration: 120 });
+    },
+    [zoomTo],
+  );
 
   const handleSave = useCallback(async () => {
     if (!onSaveRef.current || readOnly) return;
-    setSaving(true);
-    try {
-      const serialized = JSON.stringify(
-        flowToCanvasDocument(nodesRef.current, edgesRef.current),
-        null,
-        2,
-      );
-      lastSerializedRef.current = serialized;
-      await onSaveRef.current(serialized);
-    } finally {
-      setSaving(false);
-    }
+    const serialized = JSON.stringify(
+      flowToCanvasDocument(nodesRef.current, edgesRef.current),
+      null,
+      2,
+    );
+    lastSerializedRef.current = serialized;
+    await onSaveRef.current(serialized);
   }, [readOnly]);
 
   useGlobalSaveShortcut(Boolean(onSave) && !readOnly, handleSave);
 
+  // Space temporary pan + canvas keyboard shortcuts.
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isTextInputElement(event.target)) return;
+      const activeInside =
+        sectionRef.current?.contains(document.activeElement) || isPointerInsideRef.current;
+      if (!activeInside) return;
+
+      if (event.code === "Space" && !event.repeat) {
+        event.preventDefault();
+        setSpacePanning(true);
+        return;
+      }
+
+      if (event.key === "Escape") {
+        setContextMenu(null);
+        setShortcutsOpen(false);
+        setActivatedNodeId(null);
+        const cleared = nodesRef.current.map((n) => (n.selected ? { ...n, selected: false } : n));
+        nodesRef.current = cleared;
+        setNodes(cleared);
+        return;
+      }
+
+      const mod = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+
+      if (!mod && !event.altKey) {
+        if (key === "v") {
+          setInteractionMode("select");
+          return;
+        }
+        if (key === "h") {
+          setInteractionMode("pan");
+          return;
+        }
+        if ((event.key === "Delete" || event.key === "Backspace") && !readOnly) {
+          const curSelectedIds = nodesRef.current.filter((n) => n.selected).map((n) => n.id);
+          const hasSelectedEdges = edgesRef.current.some((e) => e.selected);
+          if (curSelectedIds.length > 0 || hasSelectedEdges) {
+            event.preventDefault();
+            handleDeleteIds(curSelectedIds);
+          }
+          return;
+        }
+      }
+
+      if (!mod || readOnly) return;
+
+      if (key === "z" && !event.shiftKey) {
+        event.preventDefault();
+        handleUndo();
+      } else if ((key === "z" && event.shiftKey) || key === "y") {
+        event.preventDefault();
+        handleRedo();
+      } else if (key === "a") {
+        event.preventDefault();
+        const allSelected = nodesRef.current.map((n) => ({ ...n, selected: true }));
+        nodesRef.current = allSelected;
+        setNodes(allSelected);
+      } else if (key === "d") {
+        const curSelectedIds = nodesRef.current.filter((n) => n.selected).map((n) => n.id);
+        if (curSelectedIds.length > 0) {
+          event.preventDefault();
+          handleDuplicateIds(curSelectedIds);
+        }
+      } else if (key === "g" && !event.shiftKey) {
+        event.preventDefault();
+        handleGroupSelected();
+      } else if (key === "g" && event.shiftKey) {
+        const selectedGroup = nodesRef.current.find(
+          (n) => n.selected && n.type === "canvasGroup",
+        );
+        if (selectedGroup) {
+          event.preventDefault();
+          handleUngroupNode(selectedGroup.id);
+        }
+      }
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.code === "Space") {
+        setSpacePanning(false);
+      }
+    };
+
+    const handleWindowBlur = () => {
+      setSpacePanning(false);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleWindowBlur);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleWindowBlur);
+    };
+  }, [
+    handleDeleteIds,
+    handleDuplicateIds,
+    handleGroupSelected,
+    handleRedo,
+    handleUndo,
+    handleUngroupNode,
+    readOnly,
+  ]);
+
+  const handlePaste = useCallback(
+    (event: ReactClipboardEvent<HTMLElement>) => {
+      if (readOnly || isTextInputElement(event.target)) return;
+      const items = event.clipboardData?.items;
+      if (items) {
+        for (const item of items) {
+          if (item.type.startsWith("image/")) {
+            const file = item.getAsFile();
+            if (file) {
+              event.preventDefault();
+              void uploadAndAppendImage(file);
+              return;
+            }
+          }
+        }
+      }
+
+      const text = event.clipboardData?.getData("text/plain")?.trim();
+      if (!text) return;
+      event.preventDefault();
+      try {
+        const parsed = new URL(text);
+        if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+          handleAddLinkCard(parsed.toString());
+          return;
+        }
+      } catch {
+        // Fallback to plain note card.
+      }
+      handleAddTextNoteAt(undefined, undefined, text);
+    },
+    [handleAddLinkCard, handleAddTextNoteAt, readOnly, uploadAndAppendImage],
+  );
+
+  const handleDrop = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (readOnly) return;
+      const files = Array.from(event.dataTransfer.files);
+      const imageFile = files.find((f) => f.type.startsWith("image/"));
+      if (!imageFile) return;
+      event.preventDefault();
+      const flowPos = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      void uploadAndAppendImage(imageFile, {
+        x: Math.round(flowPos.x - 150),
+        y: Math.round(flowPos.y - 110),
+      });
+    },
+    [readOnly, screenToFlowPosition, uploadAndAppendImage],
+  );
+
+  const handlePaneContextMenu = useCallback(
+    (event: MouseEvent | ReactMouseEvent) => {
+      if (readOnly) return;
+      event.preventDefault();
+      const flowPos = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      setContextMenu({
+        kind: "pane",
+        screenX: event.clientX,
+        screenY: event.clientY,
+        flowX: flowPos.x,
+        flowY: flowPos.y,
+      });
+    },
+    [readOnly, screenToFlowPosition],
+  );
+
+  const handleNodeContextMenu = useCallback(
+    (event: ReactMouseEvent, targetNode: MerakFlowNode) => {
+      if (readOnly) return;
+      event.preventDefault();
+      setContextMenu({
+        kind: "node",
+        screenX: event.clientX,
+        screenY: event.clientY,
+        nodeId: targetNode.id,
+        isGroup: targetNode.type === "canvasGroup",
+      });
+    },
+    [readOnly],
+  );
+
+  const handleDuplicateSingle = useCallback(
+    (targetId: string) => {
+      handleDuplicateIds([targetId]);
+    },
+    [handleDuplicateIds],
+  );
+
+  const handleDeleteSingle = useCallback(
+    (targetId: string) => {
+      handleDeleteIds([targetId]);
+    },
+    [handleDeleteIds],
+  );
+
   const contextValue = useMemo<CanvasEditorContextValue>(
     () => ({
       readOnly,
+      selectedNodeCount: selectedIds.length,
       activatedNodeId,
       setActivatedNodeId,
       updateNodeData,
+      onDuplicateNode: handleDuplicateSingle,
+      onDeleteNode: handleDeleteSingle,
+      onUngroupNode: handleUngroupNode,
       onOpenNode,
       resolveNode,
     }),
-    [readOnly, activatedNodeId, updateNodeData, onOpenNode, resolveNode],
+    [
+      readOnly,
+      selectedIds.length,
+      activatedNodeId,
+      updateNodeData,
+      handleDuplicateSingle,
+      handleDeleteSingle,
+      handleUngroupNode,
+      onOpenNode,
+      resolveNode,
+    ],
   );
 
   const isLinkValid = useMemo(() => {
@@ -941,68 +1618,44 @@ function CanvasEditorInner({
     }
   }, [linkUrl]);
 
+  const effectivePan = spacePanning || interactionMode === "pan";
+
   return (
     <CanvasEditorContext.Provider value={contextValue}>
       <section
+        ref={sectionRef}
+        tabIndex={-1}
         aria-label={`Infinite Canvas Editor: ${node.title}`}
+        onMouseEnter={() => {
+          isPointerInsideRef.current = true;
+        }}
+        onMouseLeave={() => {
+          isPointerInsideRef.current = false;
+        }}
+        onPaste={handlePaste}
         {...stylex.props(styles.root)}
       >
-        <Toolbar aria-label="Canvas toolbar" {...stylex.props(styles.toolbar)}>
-          <Inline gap="sm">
-            <Network size={16} />
-            <span {...stylex.props(styles.titleText)}>{node.title}</span>
-            <Badge tone="accent">Canvas 1.0</Badge>
-            <Badge tone="neutral">
-              {nodes.length} nodes · {edges.length} edges
-            </Badge>
-            {readOnly ? <Badge tone="neutral">Read-only</Badge> : null}
-          </Inline>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleUploadImageChange}
+          {...stylex.props(styles.hiddenInput)}
+        />
 
-          <Inline gap="xs">
-            {!readOnly ? (
-              <>
-                <Button onClick={handleAddTextNote}>
-                  <StickyNote size={14} />
-                  Text Note
-                </Button>
-                <Button onClick={handleAddGroup}>
-                  <BoxSelect size={14} />
-                  Group
-                </Button>
-                <Button onClick={() => setEmbedDialogOpen(true)}>
-                  <FileText size={14} />
-                  Embed Node
-                </Button>
-                <Button onClick={() => setLinkDialogOpen(true)}>
-                  <Link2 size={14} />
-                  Link
-                </Button>
-                <Button
-                  disabled={uploading}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Upload size={14} />
-                  {uploading ? "Uploading..." : "Upload Image"}
-                </Button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleUploadImageChange}
-                  {...stylex.props(styles.hiddenInput)}
-                />
-              </>
-            ) : null}
-            {onSave && !readOnly ? (
-              <Button disabled={saving} onClick={handleSave}>
-                <Save size={14} />
-                {saving ? "Saving..." : "Save"}
-              </Button>
-            ) : null}
-          </Inline>
-        </Toolbar>
-
-        <div className="merak-canvas-host" {...stylex.props(styles.flowWrap)}>
+        <div
+          ref={flowWrapRef}
+          data-merak-editor="canvas"
+          data-merak-theme={theme}
+          data-merak-canvas-mode={effectivePan ? "pan" : "select"}
+          onDragOver={(event) => {
+            if (!readOnly && event.dataTransfer.types.includes("Files")) {
+              event.preventDefault();
+            }
+          }}
+          onDrop={handleDrop}
+          {...stylex.props(styles.flowWrap)}
+        >
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -1011,24 +1664,114 @@ function CanvasEditorInner({
             nodesDraggable={!readOnly}
             nodesConnectable={!readOnly}
             elementsSelectable
+            panOnDrag={effectivePan ? true : [1, 2]}
+            selectionOnDrag={!effectivePan}
+            selectionMode={SelectionMode.Partial}
+            minZoom={0.15}
+            maxZoom={2.5}
             onNodesChange={handleNodesChange}
+            onNodeDragStart={handleNodeDragStart}
+            onNodeDragStop={handleNodeDragStop}
             onEdgesChange={handleEdgesChange}
             onConnect={handleConnect}
-            onPaneClick={() => setActivatedNodeId(null)}
+            onPaneClick={() => {
+              setActivatedNodeId(null);
+              setContextMenu(null);
+            }}
+            onPaneContextMenu={handlePaneContextMenu}
+            onNodeContextMenu={handleNodeContextMenu}
             fitView={nodes.length > 0}
           >
-            <Background />
-            <Controls />
-            <MiniMap pannable zoomable />
+            {gridMode !== "blank" ? (
+              <Background
+                variant={gridMode === "lines" ? BackgroundVariant.Lines : BackgroundVariant.Dots}
+                gap={gridMode === "lines" ? 28 : 22}
+                size={gridMode === "lines" ? 1 : 1.5}
+                color={
+                  theme === "dark"
+                    ? gridMode === "lines"
+                      ? "rgba(245, 245, 244, 0.07)"
+                      : "rgba(245, 245, 244, 0.18)"
+                    : gridMode === "lines"
+                      ? "rgba(68, 64, 60, 0.08)"
+                      : "rgba(68, 64, 60, 0.22)"
+                }
+              />
+            ) : null}
+            {minimapOpen ? (
+              <MiniMap
+                position="bottom-left"
+                pannable
+                zoomable
+                nodeColor={theme === "dark" ? "#3a3631" : "#d6d3ca"}
+                maskColor={
+                  theme === "dark" ? "rgba(24, 23, 21, 0.7)" : "rgba(244, 242, 237, 0.7)"
+                }
+              />
+            ) : null}
           </ReactFlow>
 
           {nodes.length === 0 ? (
-            <EmptyState
-              icon={<Network size={28} />}
-              title="Empty Infinite Canvas"
-              description="Add text notes, groups, embedded Merak nodes, links, or uploaded images from the toolbar."
-            />
+            <div {...stylex.props(styles.emptyOverlay)}>
+              <EmptyState
+                icon={<Network size={28} />}
+                title="Empty Infinite Canvas"
+                description="Use the floating dock below or right-click anywhere to add notes, groups, links, or images."
+              />
+            </div>
           ) : null}
+
+          <CanvasMultiSelectBar
+            selectedCount={selectedIds.length}
+            readOnly={readOnly}
+            onGroupSelected={handleGroupSelected}
+            onDuplicateSelected={() => handleDuplicateIds(selectedIds)}
+            onDeleteSelected={() => handleDeleteIds(selectedIds)}
+          />
+
+          <CanvasFloatingChrome
+            readOnly={readOnly}
+            interactionMode={interactionMode}
+            spacePanning={spacePanning}
+            onInteractionModeChange={setInteractionMode}
+            canUndo={historyMeta.canUndo}
+            canRedo={historyMeta.canRedo}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            onFitView={handleFitView}
+            onAddTextNote={() => handleAddTextNoteAt()}
+            onAddGroup={() => handleAddGroupAt()}
+            onOpenEmbedDialog={() => setEmbedDialogOpen(true)}
+            onOpenLinkDialog={() => setLinkDialogOpen(true)}
+            onTriggerUploadImage={() => fileInputRef.current?.click()}
+            uploading={uploading}
+            gridMode={gridMode}
+            onGridModeChange={handleGridModeChange}
+            nodeCount={nodes.length}
+            edgeCount={edges.length}
+            onClearCanvas={handleClearCanvas}
+            minimapOpen={minimapOpen}
+            onToggleMinimap={() => setMinimapOpen((prev) => !prev)}
+            zoom={zoom}
+            onZoomChange={handleZoomChange}
+            shortcutsOpen={shortcutsOpen}
+            onShortcutsOpenChange={setShortcutsOpen}
+          />
+
+          <CanvasContextMenu
+            menu={contextMenu}
+            selectedCount={selectedIds.length}
+            onClose={() => setContextMenu(null)}
+            onAddTextAt={(x, y) => handleAddTextNoteAt(x, y)}
+            onAddGroupAt={(x, y) => handleAddGroupAt(x, y)}
+            onOpenLinkDialog={() => setLinkDialogOpen(true)}
+            onOpenEmbedDialog={() => setEmbedDialogOpen(true)}
+            onFitView={handleFitView}
+            onDuplicateNode={handleDuplicateSingle}
+            onGroupSelected={handleGroupSelected}
+            onUngroupNode={handleUngroupNode}
+            onDeleteNode={handleDeleteSingle}
+          />
         </div>
 
         <Dialog open={embedDialogOpen} onOpenChange={setEmbedDialogOpen}>

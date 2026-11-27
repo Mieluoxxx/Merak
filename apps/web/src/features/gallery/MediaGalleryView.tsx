@@ -19,6 +19,7 @@ import {
   Inline,
   Menu,
   MenuContent,
+  MenuGroup,
   MenuGroupLabel,
   MenuItem,
   MenuSeparator,
@@ -68,8 +69,10 @@ const styles = stylex.create({
   root: {
     display: "flex",
     flexDirection: "column",
-    gap: space.xl,
+    gap: space.lg,
     width: "100%",
+    maxWidth: "1080px",
+    marginInline: "auto",
   },
   header: {
     display: "flex",
@@ -77,16 +80,22 @@ const styles = stylex.create({
     justifyContent: "space-between",
     gap: space.md,
     flexWrap: "wrap",
+    paddingBottom: space.lg,
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: colors.borderSubtle,
   },
   title: {
     margin: 0,
     fontSize: font.sizeXl,
     fontWeight: 600,
+    letterSpacing: "-0.02em",
   },
   subtitle: {
     margin: 0,
     marginTop: space.xs,
     fontSize: font.sizeSm,
+    lineHeight: 1.55,
     color: colors.textMuted,
   },
   controlsBar: {
@@ -96,21 +105,54 @@ const styles = stylex.create({
     gap: space.md,
     flexWrap: "wrap",
   },
+  fileInput: {
+    width: "100%",
+    maxWidth: "100%",
+  },
   dropzone: {
     display: "flex",
-    flexDirection: "column",
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: space.sm,
-    paddingBlock: space.xl,
-    paddingInline: space.lg,
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: space.md,
+    width: "100%",
+    paddingBlock: "14px",
+    paddingInline: "18px",
     borderRadius: radius.lg,
-    borderWidth: "2px",
+    borderWidth: "1px",
     borderStyle: "dashed",
     borderColor: colors.border,
     backgroundColor: colors.bgSubtle,
-    textAlign: "center",
+    textAlign: "left",
     color: colors.textMuted,
+  },
+  dropzoneLead: {
+    display: "flex",
+    alignItems: "center",
+    gap: space.md,
+    minWidth: 0,
+    flex: "1 1 260px",
+  },
+  dropzoneIcon: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "36px",
+    height: "36px",
+    borderRadius: radius.md,
+    backgroundColor: colors.bgHover,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.borderSubtle,
+    color: colors.textMuted,
+    flexShrink: 0,
+  },
+  dropzoneTextGroup: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "2px",
+    minWidth: 0,
   },
   dropzoneTitle: {
     margin: 0,
@@ -122,6 +164,12 @@ const styles = stylex.create({
     margin: 0,
     fontSize: font.sizeXs,
     color: colors.textSubtle,
+  },
+  dropzoneTrigger: {
+    marginTop: 0,
+    height: "32px",
+    paddingInline: "14px",
+    flexShrink: 0,
   },
   grid: {
     display: "grid",
@@ -137,7 +185,9 @@ const styles = stylex.create({
     height: "156px",
     width: "100%",
     backgroundColor: colors.bgSubtle,
-    borderBottom: `1px solid ${colors.borderSubtle}`,
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: colors.borderSubtle,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -192,7 +242,8 @@ const styles = stylex.create({
     fontSize: font.sizeXs,
     color: colors.textMuted,
     backgroundColor: "transparent",
-    border: "none",
+    borderWidth: 0,
+    borderStyle: "none",
     padding: 0,
     cursor: "pointer",
   },
@@ -204,7 +255,9 @@ const styles = stylex.create({
     padding: space.xs,
     borderRadius: radius.sm,
     backgroundColor: colors.bgSubtle,
-    border: `1px solid ${colors.borderSubtle}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.borderSubtle,
   },
   backlinkButton: {
     display: "flex",
@@ -215,7 +268,8 @@ const styles = stylex.create({
     paddingBlock: space.xxs,
     paddingInline: space.xs,
     borderRadius: radius.sm,
-    border: "none",
+    borderWidth: 0,
+    borderStyle: "none",
     backgroundColor: {
       default: "transparent",
       ":hover": colors.bgHover,
@@ -234,7 +288,9 @@ const styles = stylex.create({
     gap: space.xs,
     marginTop: "auto",
     paddingTop: space.xs,
-    borderTop: `1px solid ${colors.borderSubtle}`,
+    borderTopWidth: "1px",
+    borderTopStyle: "solid",
+    borderTopColor: colors.borderSubtle,
   },
 });
 
@@ -399,23 +455,25 @@ export function MediaGalleryView({
                 <ChevronDown size={14} />
               </MenuTrigger>
               <MenuContent align="start">
-                <MenuGroupLabel>Filter by Space</MenuGroupLabel>
-                <MenuItem
-                  value="space:all"
-                  onSelect={() => setSelectedSpaceId(null)}
-                >
-                  All Spaces
-                </MenuItem>
-                {spaces.length > 0 ? <MenuSeparator /> : null}
-                {spaces.map((item) => (
+                <MenuGroup>
+                  <MenuGroupLabel>Filter by Space</MenuGroupLabel>
                   <MenuItem
-                    key={item.id}
-                    value={`space:${item.id}`}
-                    onSelect={() => setSelectedSpaceId(item.id)}
+                    value="space:all"
+                    onSelect={() => setSelectedSpaceId(null)}
                   >
-                    {item.name}
+                    All Spaces
                   </MenuItem>
-                ))}
+                  {spaces.length > 0 ? <MenuSeparator /> : null}
+                  {spaces.map((item) => (
+                    <MenuItem
+                      key={item.id}
+                      value={`space:${item.id}`}
+                      onSelect={() => setSelectedSpaceId(item.id)}
+                    >
+                      {item.name}
+                    </MenuItem>
+                  ))}
+                </MenuGroup>
               </MenuContent>
             </Menu>
           ) : null}
@@ -436,20 +494,27 @@ export function MediaGalleryView({
             void handleUploadFiles(details.added);
           }
         }}
+        {...stylex.props(styles.fileInput)}
       >
         <FileInputDropzone {...stylex.props(styles.dropzone)}>
-          <UploadCloud size={22} />
-          <p {...stylex.props(styles.dropzoneTitle)}>
-            {uploadingCount > 0
-              ? `Uploading ${uploadingCount} ${uploadingCount === 1 ? "file" : "files"}...`
-              : "Drag and drop files here, or paste from clipboard"}
-          </p>
-          <p {...stylex.props(styles.dropzoneHint)}>
-            {selectedSpaceId
-              ? `Uploads will be tagged to "${selectedSpaceLabel}" and deduplicated by SHA-256.`
-              : "Uploads are stored once per organization and deduplicated by SHA-256."}
-          </p>
-          <FileInputTrigger>
+          <div {...stylex.props(styles.dropzoneLead)}>
+            <div {...stylex.props(styles.dropzoneIcon)}>
+              <UploadCloud size={18} />
+            </div>
+            <div {...stylex.props(styles.dropzoneTextGroup)}>
+              <p {...stylex.props(styles.dropzoneTitle)}>
+                {uploadingCount > 0
+                  ? `Uploading ${uploadingCount} ${uploadingCount === 1 ? "file" : "files"}...`
+                  : "Drag and drop files here, or paste from clipboard"}
+              </p>
+              <p {...stylex.props(styles.dropzoneHint)}>
+                {selectedSpaceId
+                  ? `Uploads will be tagged to "${selectedSpaceLabel}" and deduplicated by SHA-256.`
+                  : "Uploads are stored once per organization and deduplicated by SHA-256."}
+              </p>
+            </div>
+          </div>
+          <FileInputTrigger {...stylex.props(styles.dropzoneTrigger)}>
             <span>Choose Files</span>
           </FileInputTrigger>
         </FileInputDropzone>
@@ -466,17 +531,15 @@ export function MediaGalleryView({
             : "Failed to load media gallery."}
         </Card>
       ) : items.length === 0 ? (
-        <Card padding="none" variant="bordered">
-          <EmptyState
-            icon={<ImageIcon size={28} />}
-            title={filterMode === "orphans" ? "No orphaned media" : "No media assets yet"}
-            description={
-              filterMode === "orphans"
-                ? "Every uploaded media asset is currently referenced by at least one document or canvas."
-                : "Drop images or files above to upload them to your workspace Media Gallery."
-            }
-          />
-        </Card>
+        <EmptyState
+          icon={<ImageIcon size={22} />}
+          title={filterMode === "orphans" ? "No orphaned media" : "No media assets yet"}
+          description={
+            filterMode === "orphans"
+              ? "Every uploaded media asset is currently referenced by at least one document or canvas."
+              : "Drop images or files above to upload them to your workspace Media Gallery."
+          }
+        />
       ) : (
         <div {...stylex.props(styles.grid)}>
           {items.map((item) => {
@@ -565,7 +628,6 @@ export function MediaGalleryView({
                     {isOrphan ? (
                       <Button
                         data-variant="destructive"
-                        aria-label={`Delete ${item.filename}`}
                         onClick={() => setDeleteTarget(item)}
                       >
                         <Trash2 size={13} />

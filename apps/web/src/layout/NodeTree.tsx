@@ -39,6 +39,7 @@ import {
   Input,
   Menu,
   MenuContent,
+  MenuGroup,
   MenuGroupLabel,
   MenuItem,
   MenuItemIcon,
@@ -59,6 +60,9 @@ import {
   Blocks,
   ChevronRight,
   FileText,
+  Folder,
+  FolderOpen,
+  FolderPlus,
   GripVertical,
   MoreHorizontal,
   Network,
@@ -67,7 +71,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   createNode,
   deleteNode,
@@ -102,7 +106,33 @@ const DEFAULT_TITLES: Record<NodeType, string> = {
   excalidraw: "Untitled Whiteboard",
   html: "Untitled HTML Artifact",
   canvas: "Untitled Canvas",
+  folder: "Untitled Folder",
 };
+
+const TREE_EXPANDED_KEY_PREFIX = "merak:tree-expanded:";
+
+function loadExpandedIds(spaceId: string): string[] {
+  if (!spaceId || typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(`${TREE_EXPANDED_KEY_PREFIX}${spaceId}`);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((id): id is string => typeof id === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveExpandedIds(spaceId: string, ids: readonly string[]): void {
+  if (!spaceId || typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(`${TREE_EXPANDED_KEY_PREFIX}${spaceId}`, JSON.stringify(ids));
+  } catch {
+    // Ignore storage quota errors in restricted browsing modes.
+  }
+}
 
 const styles = stylex.create({
   wrapper: {
@@ -122,7 +152,9 @@ const styles = stylex.create({
     gap: "1px",
     paddingLeft: space.md,
     marginLeft: space.sm,
-    borderLeft: `1px solid ${colors.borderSubtle}`,
+    borderLeftWidth: "1px",
+    borderLeftStyle: "solid",
+    borderLeftColor: colors.borderSubtle,
   },
   rowShell: {
     position: "relative",
@@ -170,7 +202,8 @@ const styles = stylex.create({
     cursor: "grab",
     flexShrink: 0,
     backgroundColor: "transparent",
-    border: "none",
+    borderWidth: 0,
+    borderStyle: "none",
     padding: 0,
   },
   indicator: {
@@ -198,6 +231,14 @@ const styles = stylex.create({
     gap: space.xs,
     minWidth: 0,
     flex: "1 1 auto",
+    height: "24px",
+    paddingBlock: 0,
+    paddingInline: 0,
+    borderRadius: 0,
+    backgroundColor: {
+      default: "transparent",
+      ":hover": "transparent",
+    },
     cursor: "pointer",
     userSelect: "none",
   },
@@ -223,7 +264,8 @@ const styles = stylex.create({
     width: "22px",
     height: "22px",
     borderRadius: radius.sm,
-    border: "none",
+    borderWidth: 0,
+    borderStyle: "none",
     backgroundColor: {
       default: "transparent",
       ":hover": colors.bgActive,
@@ -233,8 +275,9 @@ const styles = stylex.create({
     padding: 0,
   },
   emptyHint: {
-    paddingBlock: space.xs,
-    paddingInline: space.sm,
+    paddingLeft: "20px",
+    paddingRight: space.sm,
+    paddingBlock: "4px",
     fontSize: font.sizeXs,
     color: colors.textSubtle,
   },
@@ -246,7 +289,9 @@ const styles = stylex.create({
     paddingInline: space.sm,
     borderRadius: radius.md,
     backgroundColor: colors.bgElevated,
-    border: `1px solid ${colors.accent}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.accent,
     boxShadow: shadow.md,
     color: colors.text,
     fontSize: font.sizeSm,
@@ -256,6 +301,15 @@ const styles = stylex.create({
     width: "100%",
     maxWidth: "400px",
   },
+  emptyFolderHint: {
+    paddingTop: "3px",
+    paddingBottom: "3px",
+    paddingLeft: "24px",
+    paddingRight: "8px",
+    fontSize: font.sizeXs,
+    color: colors.textSubtle,
+    userSelect: "none",
+  },
   form: {
     display: "flex",
     flexDirection: "column",
@@ -264,8 +318,20 @@ const styles = stylex.create({
   },
 });
 
-function NodeTypeIcon({ type }: { type: NodeType }) {
+function NodeTypeIcon({
+  type,
+  expanded = false,
+}: {
+  type: NodeType;
+  expanded?: boolean;
+}) {
   switch (type) {
+    case "folder":
+      return expanded ? (
+        <FolderOpen size={14} {...stylex.props(styles.nodeIcon)} />
+      ) : (
+        <Folder size={14} {...stylex.props(styles.nodeIcon)} />
+      );
     case "excalidraw":
       return <PenTool size={14} {...stylex.props(styles.nodeIcon)} />;
     case "html":
@@ -286,6 +352,7 @@ interface SortableTreeBranchProps {
   dropIntent: DropIntent | null;
   invalidDropIds: ReadonlySet<string>;
   onSelect: (nodeId: string) => void;
+  onToggleExpand: (nodeId: string) => void;
   onCreateChild: (parentId: string, type: NodeType) => void;
   onStartRename: (node: NodeTreeItemDto) => void;
   onStartDelete: (node: NodeTreeItemDto) => void;
@@ -300,11 +367,14 @@ function SortableTreeBranch({
   dropIntent,
   invalidDropIds,
   onSelect,
+  onToggleExpand,
   onCreateChild,
   onStartRename,
   onStartDelete,
 }: SortableTreeBranchProps) {
+  const isFolder = node.type === "folder";
   const hasChildren = node.children.length > 0;
+  const isBranch = hasChildren || isFolder;
   const isExpanded = expandedSet.has(node.id);
   const isSelected = selectedNodeId === node.id;
   const isInvalidTarget = activeDragId !== null && invalidDropIds.has(node.id);
@@ -320,7 +390,7 @@ function SortableTreeBranch({
   };
 
   return (
-    <TreeItem value={node.id} branch={hasChildren} label={node.title}>
+    <TreeItem value={node.id} branch={isBranch} label={node.title}>
       <div
         ref={setNodeRef}
         style={sortableStyle}
@@ -345,7 +415,7 @@ function SortableTreeBranch({
           <GripVertical size={12} />
         </button>
 
-        {hasChildren ? (
+        {isBranch ? (
           <TreeItemIndicator {...stylex.props(styles.indicator)}>
             <ChevronRight
               size={13}
@@ -357,10 +427,15 @@ function SortableTreeBranch({
         )}
 
         <TreeItemLabel
-          onClick={() => onSelect(node.id)}
+          onClick={() => {
+            onSelect(node.id);
+            if (isFolder) {
+              onToggleExpand(node.id);
+            }
+          }}
           {...stylex.props(styles.label)}
         >
-          <NodeTypeIcon type={node.type} />
+          <NodeTypeIcon type={node.type} expanded={isExpanded} />
           <span title={node.title} {...stylex.props(styles.labelText)}>
             {node.title}
           </span>
@@ -376,43 +451,54 @@ function SortableTreeBranch({
               <Plus size={13} />
             </MenuTrigger>
             <MenuContent align="end" sideOffset={4}>
-              <MenuGroupLabel>New Child Asset</MenuGroupLabel>
-              <MenuItem
-                value={`create:${node.id}:doc`}
-                onSelect={() => onCreateChild(node.id, "doc")}
-              >
-                <MenuItemIcon>
-                  <FileText size={13} />
-                </MenuItemIcon>
-                <span>Markdown Page</span>
-              </MenuItem>
-              <MenuItem
-                value={`create:${node.id}:excalidraw`}
-                onSelect={() => onCreateChild(node.id, "excalidraw")}
-              >
-                <MenuItemIcon>
-                  <PenTool size={13} />
-                </MenuItemIcon>
-                <span>Excalidraw Whiteboard</span>
-              </MenuItem>
-              <MenuItem
-                value={`create:${node.id}:html`}
-                onSelect={() => onCreateChild(node.id, "html")}
-              >
-                <MenuItemIcon>
-                  <Blocks size={13} />
-                </MenuItemIcon>
-                <span>HTML Artifact</span>
-              </MenuItem>
-              <MenuItem
-                value={`create:${node.id}:canvas`}
-                onSelect={() => onCreateChild(node.id, "canvas")}
-              >
-                <MenuItemIcon>
-                  <Network size={13} />
-                </MenuItemIcon>
-                <span>Infinite Canvas</span>
-              </MenuItem>
+              <MenuGroup>
+                <MenuGroupLabel>New Child Asset</MenuGroupLabel>
+                <MenuItem
+                  value={`create:${node.id}:folder`}
+                  onSelect={() => onCreateChild(node.id, "folder")}
+                >
+                  <MenuItemIcon>
+                    <FolderPlus size={13} />
+                  </MenuItemIcon>
+                  <span>Subfolder</span>
+                </MenuItem>
+                <MenuItem
+                  value={`create:${node.id}:doc`}
+                  onSelect={() => onCreateChild(node.id, "doc")}
+                >
+                  <MenuItemIcon>
+                    <FileText size={13} />
+                  </MenuItemIcon>
+                  <span>Markdown Page</span>
+                </MenuItem>
+                <MenuItem
+                  value={`create:${node.id}:excalidraw`}
+                  onSelect={() => onCreateChild(node.id, "excalidraw")}
+                >
+                  <MenuItemIcon>
+                    <PenTool size={13} />
+                  </MenuItemIcon>
+                  <span>Excalidraw Whiteboard</span>
+                </MenuItem>
+                <MenuItem
+                  value={`create:${node.id}:html`}
+                  onSelect={() => onCreateChild(node.id, "html")}
+                >
+                  <MenuItemIcon>
+                    <Blocks size={13} />
+                  </MenuItemIcon>
+                  <span>HTML Artifact</span>
+                </MenuItem>
+                <MenuItem
+                  value={`create:${node.id}:canvas`}
+                  onSelect={() => onCreateChild(node.id, "canvas")}
+                >
+                  <MenuItemIcon>
+                    <Network size={13} />
+                  </MenuItemIcon>
+                  <span>Infinite Canvas</span>
+                </MenuItem>
+              </MenuGroup>
             </MenuContent>
           </Menu>
 
@@ -450,24 +536,29 @@ function SortableTreeBranch({
         </div>
       </div>
 
-      {hasChildren ? (
+      {isBranch ? (
         <TreeGroup {...stylex.props(styles.group)}>
-          {node.children.map((child) => (
-            <SortableTreeBranch
-              key={child.id}
-              node={child}
-              selectedNodeId={selectedNodeId}
-              expandedSet={expandedSet}
-              activeDragId={activeDragId}
-              overNodeId={overNodeId}
-              dropIntent={dropIntent}
-              invalidDropIds={invalidDropIds}
-              onSelect={onSelect}
-              onCreateChild={onCreateChild}
-              onStartRename={onStartRename}
-              onStartDelete={onStartDelete}
-            />
-          ))}
+          {hasChildren ? (
+            node.children.map((child) => (
+              <SortableTreeBranch
+                key={child.id}
+                node={child}
+                selectedNodeId={selectedNodeId}
+                expandedSet={expandedSet}
+                activeDragId={activeDragId}
+                overNodeId={overNodeId}
+                dropIntent={dropIntent}
+                invalidDropIds={invalidDropIds}
+                onSelect={onSelect}
+                onToggleExpand={onToggleExpand}
+                onCreateChild={onCreateChild}
+                onStartRename={onStartRename}
+                onStartDelete={onStartDelete}
+              />
+            ))
+          ) : (
+            <div {...stylex.props(styles.emptyFolderHint)}>Empty folder</div>
+          )}
         </TreeGroup>
       ) : null}
     </TreeItem>
@@ -510,8 +601,22 @@ export function NodeTree({
   );
   const nodeMap = useMemo(() => indexTreeById(roots), [roots]);
 
-  const [expandedIds, setExpandedIds] = useState<string[]>([]);
+  const [expandedIds, setExpandedIds] = useState<string[]>(() => loadExpandedIds(spaceId));
   const expandedSet = useMemo(() => new Set(expandedIds), [expandedIds]);
+
+  useEffect(() => {
+    setExpandedIds(loadExpandedIds(spaceId));
+  }, [spaceId]);
+
+  useEffect(() => {
+    saveExpandedIds(spaceId, expandedIds);
+  }, [expandedIds, spaceId]);
+
+  const toggleExpand = useCallback((nodeId: string) => {
+    setExpandedIds((prev) =>
+      prev.includes(nodeId) ? prev.filter((id) => id !== nodeId) : [...prev, nodeId],
+    );
+  }, []);
 
   // Automatically expand ancestors of the selected node
   useEffect(() => {
@@ -562,11 +667,12 @@ export function NodeTree({
     mutationFn: createNode,
     onSuccess: async (created) => {
       await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.tree(spaceId) });
-      if (created.parentId) {
-        setExpandedIds((prev) =>
-          prev.includes(created.parentId!) ? prev : [...prev, created.parentId!],
-        );
-      }
+      setExpandedIds((prev) => {
+        const next = new Set(prev);
+        if (created.parentId) next.add(created.parentId);
+        if (created.type === "folder") next.add(created.id);
+        return next.size === prev.length ? prev : [...next];
+      });
       onNodeCreated?.(created);
       onSelectNode(created.id, spaceId);
     },
@@ -703,34 +809,42 @@ export function NodeTree({
             <span>New Asset</span>
           </MenuTrigger>
           <MenuContent align="start">
-            <MenuGroupLabel>Create in Space Root</MenuGroupLabel>
-            <MenuItem value="root:doc" onSelect={() => handleCreateNode(null, "doc")}>
-              <MenuItemIcon>
-                <FileText size={13} />
-              </MenuItemIcon>
-              <span>Markdown Page</span>
-            </MenuItem>
-            <MenuItem
-              value="root:excalidraw"
-              onSelect={() => handleCreateNode(null, "excalidraw")}
-            >
-              <MenuItemIcon>
-                <PenTool size={13} />
-              </MenuItemIcon>
-              <span>Excalidraw Whiteboard</span>
-            </MenuItem>
-            <MenuItem value="root:html" onSelect={() => handleCreateNode(null, "html")}>
-              <MenuItemIcon>
-                <Blocks size={13} />
-              </MenuItemIcon>
-              <span>HTML Artifact</span>
-            </MenuItem>
-            <MenuItem value="root:canvas" onSelect={() => handleCreateNode(null, "canvas")}>
-              <MenuItemIcon>
-                <Network size={13} />
-              </MenuItemIcon>
-              <span>Infinite Canvas</span>
-            </MenuItem>
+            <MenuGroup>
+              <MenuGroupLabel>Create in Space Root</MenuGroupLabel>
+              <MenuItem value="root:folder" onSelect={() => handleCreateNode(null, "folder")}>
+                <MenuItemIcon>
+                  <FolderPlus size={13} />
+                </MenuItemIcon>
+                <span>Folder</span>
+              </MenuItem>
+              <MenuItem value="root:doc" onSelect={() => handleCreateNode(null, "doc")}>
+                <MenuItemIcon>
+                  <FileText size={13} />
+                </MenuItemIcon>
+                <span>Markdown Page</span>
+              </MenuItem>
+              <MenuItem
+                value="root:excalidraw"
+                onSelect={() => handleCreateNode(null, "excalidraw")}
+              >
+                <MenuItemIcon>
+                  <PenTool size={13} />
+                </MenuItemIcon>
+                <span>Excalidraw Whiteboard</span>
+              </MenuItem>
+              <MenuItem value="root:html" onSelect={() => handleCreateNode(null, "html")}>
+                <MenuItemIcon>
+                  <Blocks size={13} />
+                </MenuItemIcon>
+                <span>HTML Artifact</span>
+              </MenuItem>
+              <MenuItem value="root:canvas" onSelect={() => handleCreateNode(null, "canvas")}>
+                <MenuItemIcon>
+                  <Network size={13} />
+                </MenuItemIcon>
+                <span>Infinite Canvas</span>
+              </MenuItem>
+            </MenuGroup>
           </MenuContent>
         </Menu>
       ) : null}
@@ -781,6 +895,7 @@ export function NodeTree({
                   dropIntent={dropIntent}
                   invalidDropIds={invalidDropIds}
                   onSelect={(nodeId) => onSelectNode(nodeId, spaceId)}
+                  onToggleExpand={toggleExpand}
                   onCreateChild={(parentId, type) => handleCreateNode(parentId, type)}
                   onStartRename={(target) => {
                     setRenameTarget(target);

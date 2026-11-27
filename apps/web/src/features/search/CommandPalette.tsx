@@ -24,6 +24,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Blocks,
   FileText,
+  Folder,
   Image as ImageIcon,
   KeyRound,
   Network,
@@ -54,6 +55,7 @@ const NODE_TYPE_LABELS: Record<NodeType, string> = {
   excalidraw: "Whiteboard",
   html: "HTML",
   canvas: "Canvas",
+  folder: "Folder",
 };
 
 const styles = stylex.create({
@@ -169,6 +171,8 @@ const styles = stylex.create({
 
 function renderNodeIcon(type: NodeType) {
   switch (type) {
+    case "folder":
+      return <Folder size={14} />;
     case "excalidraw":
       return <PenTool size={14} />;
     case "html":
@@ -251,6 +255,13 @@ export function CommandPalette({
     const actions: QuickActionDef[] = [];
     if (onCreateNode && targetSpaceId) {
       actions.push(
+        {
+          id: "action:create-folder",
+          label: "New Folder",
+          keywords: ["create", "new", "folder", "directory", "subfolder"],
+          icon: <Folder size={14} />,
+          run: () => onCreateNode("folder", targetSpaceId),
+        },
         {
           id: "action:create-doc",
           label: "New Markdown Document",

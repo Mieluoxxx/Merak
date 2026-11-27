@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const nodeTypeSchema = z.enum(["doc", "excalidraw", "html", "canvas"]);
+export const nodeTypeSchema = z.enum(["doc", "excalidraw", "html", "canvas", "folder"]);
 export type NodeType = z.infer<typeof nodeTypeSchema>;
 
 export const nodeSummaryDtoSchema = z.object({

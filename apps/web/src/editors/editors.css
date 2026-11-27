@@ -1,75 +1,728 @@
 /* Scoped third-party editor bridge styles aligned with @merak/ui/tokens.stylex */
 
-.merak-bn-container[data-merak-theme="light"] {
-  --bn-colors-editor-text: #18181b;
-  --bn-colors-editor-background: #ffffff;
-  --bn-colors-menu-text: #18181b;
+[data-merak-editor="markdown"][data-merak-theme="light"],
+[data-merak-editor="markdown"] .bn-container[data-color-scheme="light"] {
+  --bn-colors-editor-text: #37352f;
+  --bn-colors-editor-background: transparent;
+  --bn-colors-menu-text: #37352f;
   --bn-colors-menu-background: #ffffff;
-  --bn-colors-tooltip-text: #18181b;
-  --bn-colors-tooltip-background: #f7f7f5;
-  --bn-colors-hovered-text: #18181b;
-  --bn-colors-hovered-background: rgba(15, 23, 42, 0.05);
+  --bn-colors-tooltip-text: #37352f;
+  --bn-colors-tooltip-background: #f8f8f7;
+  --bn-colors-hovered-text: #37352f;
+  --bn-colors-hovered-background: rgba(55, 53, 47, 0.06);
   --bn-colors-selected-text: #ffffff;
-  --bn-colors-selected-background: #2563eb;
-  --bn-colors-disabled-text: #8c8c94;
-  --bn-colors-disabled-background: #f7f7f5;
-  --bn-colors-shadow: rgba(0, 0, 0, 0.1);
-  --bn-colors-border: #e4e4e0;
-  --bn-colors-side-menu: #8c8c94;
+  --bn-colors-selected-background: #2383e2;
+  --bn-colors-disabled-text: #9b9a97;
+  --bn-colors-disabled-background: #f8f8f7;
+  --bn-colors-shadow: rgba(15, 15, 15, 0.12);
+  --bn-colors-border: rgba(55, 53, 47, 0.14);
+  --bn-colors-side-menu: #9b9a97;
   --bn-border-radius: 8px;
-  --bn-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  --bn-font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Inter, Roboto, sans-serif;
 }
 
-.merak-bn-container[data-merak-theme="dark"] {
-  --bn-colors-editor-text: #eceef2;
-  --bn-colors-editor-background: #111215;
-  --bn-colors-menu-text: #eceef2;
-  --bn-colors-menu-background: #1f2026;
-  --bn-colors-tooltip-text: #eceef2;
-  --bn-colors-tooltip-background: #18191d;
-  --bn-colors-hovered-text: #eceef2;
-  --bn-colors-hovered-background: rgba(255, 255, 255, 0.06);
-  --bn-colors-selected-text: #0b1220;
-  --bn-colors-selected-background: #60a5fa;
-  --bn-colors-disabled-text: #6e7380;
-  --bn-colors-disabled-background: #18191d;
-  --bn-colors-shadow: rgba(0, 0, 0, 0.55);
-  --bn-colors-border: #2c2e36;
-  --bn-colors-side-menu: #6e7380;
+[data-merak-editor="markdown"][data-merak-theme="dark"],
+[data-merak-editor="markdown"] .bn-container[data-color-scheme="dark"] {
+  --bn-colors-editor-text: #f0efed;
+  --bn-colors-editor-background: transparent;
+  --bn-colors-menu-text: #f0efed;
+  --bn-colors-menu-background: #252525;
+  --bn-colors-tooltip-text: #f0efed;
+  --bn-colors-tooltip-background: #202020;
+  --bn-colors-hovered-text: #f0efed;
+  --bn-colors-hovered-background: rgba(255, 255, 255, 0.08);
+  --bn-colors-selected-text: #191919;
+  --bn-colors-selected-background: #4e94ec;
+  --bn-colors-disabled-text: #7d7a75;
+  --bn-colors-disabled-background: #202020;
+  --bn-colors-shadow: rgba(0, 0, 0, 0.42);
+  --bn-colors-border: #383836;
+  --bn-colors-side-menu: #7d7a75;
   --bn-border-radius: 8px;
-  --bn-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  --bn-font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Inter, Roboto, sans-serif;
 }
 
-.merak-bn-container .bn-container {
+[data-merak-editor="markdown"] .bn-container {
   height: 100%;
   background: transparent;
+  border-radius: 0;
 }
 
-.merak-bn-container .bn-editor {
+[data-merak-editor="markdown"] .bn-editor {
   min-height: 100%;
+  max-width: 780px;
+  margin-inline: auto;
   background: transparent;
-  padding-inline: 44px;
-  padding-block: 24px;
+  border-radius: 0;
+  padding-inline: 54px;
+  padding-block: 28px 96px;
+  font-size: 16px;
+  line-height: 1.5;
 }
 
-.merak-cm-host .cm-editor {
+[data-merak-editor="markdown"] .bn-editor .bn-block-outer {
+  margin-block: 1px;
+}
+
+[data-merak-editor="markdown"] .bn-block-content {
+  padding-block: 2px;
+}
+
+/* Move heading top spacing outside blockContainer so blue highlight tightly wraps heading text */
+[data-merak-editor="markdown"]
+  .bn-block-outer:has(> [data-node-type="blockContainer"] > .bn-block-content[data-content-type="heading"]) {
+  margin-top: 20px;
+}
+
+[data-merak-editor="markdown"]
+  .bn-block-outer:has(
+    > [data-node-type="blockContainer"] > .bn-block-content[data-content-type="heading"][data-level="2"]
+  ) {
+  margin-top: 16px;
+}
+
+[data-merak-editor="markdown"]
+  .bn-block-outer:has(
+    > [data-node-type="blockContainer"] > .bn-block-content[data-content-type="heading"][data-level="3"]
+  ) {
+  margin-top: 10px;
+}
+
+[data-merak-editor="markdown"]
+  .bn-block-outer:has(
+    > [data-node-type="blockContainer"] > .bn-block-content[data-content-type="heading"][data-level="4"]
+  ) {
+  margin-top: 6px;
+}
+
+/* Notion-proportioned heading scale (30 / 24 / 20 / 17 px) */
+[data-merak-editor="markdown"] .bn-block-content[data-content-type="heading"] {
+  --level: 1.875em;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+[data-merak-editor="markdown"] .bn-block-content[data-content-type="heading"][data-level="2"] {
+  --level: 1.5em;
+  padding-top: 2px;
+}
+
+[data-merak-editor="markdown"] .bn-block-content[data-content-type="heading"][data-level="3"] {
+  --level: 1.25em;
+  padding-top: 2px;
+}
+
+[data-merak-editor="markdown"] .bn-block-content[data-content-type="heading"][data-level="4"] {
+  --level: 1.0625em;
+  padding-top: 2px;
+}
+
+[data-merak-editor="markdown"] .bn-block-content[data-content-type="heading"] .bn-inline-content,
+[data-merak-editor="markdown"] .bn-block-content[data-content-type="heading"] h1,
+[data-merak-editor="markdown"] .bn-block-content[data-content-type="heading"] h2,
+[data-merak-editor="markdown"] .bn-block-content[data-content-type="heading"] h3,
+[data-merak-editor="markdown"] .bn-block-content[data-content-type="heading"] h4 {
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+}
+
+/* Notion inline code pill */
+[data-merak-editor="markdown"]
+  .bn-block-content:not([data-content-type="codeBlock"])
+  .bn-inline-content
+  code {
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-size: 85%;
+  padding: 0.17em 0.35em;
+  border-radius: 4px;
+  color: #eb5757;
+  background-color: rgba(135, 131, 120, 0.15);
+}
+
+[data-merak-editor="markdown"][data-merak-theme="dark"]
+  .bn-block-content:not([data-content-type="codeBlock"])
+  .bn-inline-content
+  code {
+  color: #cf5148;
+  background-color: rgba(255, 255, 255, 0.055);
+}
+
+/* Notion full-contrast blockquote with 3px bar */
+[data-merak-editor="markdown"] [data-content-type="quote"] blockquote {
+  color: var(--bn-colors-editor-text);
+  border-left: 3px solid currentColor;
+  margin: 4px 0;
+  padding-left: 14px;
+  font-style: normal;
+}
+
+/* Notion warm hairline divider */
+[data-merak-editor="markdown"] [data-content-type="divider"] hr {
+  border: none;
+  border-top: 1px solid rgba(55, 53, 47, 0.16);
+  margin: 8px 0;
+}
+
+[data-merak-editor="markdown"][data-merak-theme="dark"] [data-content-type="divider"] hr {
+  border-top-color: rgba(255, 255, 235, 0.1);
+}
+
+/* Notion crisp square checklist */
+[data-merak-editor="markdown"] .bn-block-content[data-content-type="checkListItem"] > div:has(> input) {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+}
+
+[data-merak-editor="markdown"] .bn-block-content[data-content-type="checkListItem"] > div > input {
+  width: 15px;
+  height: 15px;
+  margin-left: 2px;
+  margin-right: 10px;
+  accent-color: #2383e2;
+  cursor: pointer;
+}
+
+[data-merak-editor="markdown"]
+  .bn-block-content[data-content-type="checkListItem"][data-checked="true"]
+  .bn-inline-content {
+  color: var(--bn-colors-side-menu);
+  text-decoration: line-through;
+}
+
+/* Notion warm code block */
+[data-merak-editor="markdown"] .bn-block-content[data-content-type="codeBlock"] {
+  position: relative;
+  overflow: visible;
+  background-color: #f7f6f3;
+  color: #37352f;
+  border: none;
+  border-radius: 10px;
+  margin-block: 8px;
+  padding: 0;
+}
+
+[data-merak-editor="markdown"][data-merak-theme="dark"]
+  .bn-block-content[data-content-type="codeBlock"] {
+  background-color: rgba(252, 252, 252, 0.03);
+  color: #f0efed;
+  border: none;
+}
+
+[data-merak-editor="markdown"] .merak-code-block {
+  position: relative;
+  width: 100%;
+  border-radius: 10px;
+}
+
+[data-merak-editor="markdown"] .merak-code-toolbar {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 2px;
+  gap: 0;
+  border: none;
+  border-radius: 6px;
+  background-color: #ffffff;
+  color: #787774;
+  box-shadow:
+    0 0 0 1px rgba(55, 53, 47, 0.1),
+    0 4px 12px -2px rgba(15, 15, 15, 0.06);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+
+[data-merak-editor="markdown"][data-merak-theme="dark"] .merak-code-toolbar {
+  background-color: #202020;
+  color: #8e8b86;
+  box-shadow:
+    0 0 0 1px #383836,
+    0 4px 12px -2px rgba(25, 25, 25, 0.08);
+}
+
+[data-merak-editor="markdown"] .merak-code-block:hover .merak-code-toolbar,
+[data-merak-editor="markdown"] .merak-code-toolbar:focus-within,
+[data-merak-editor="markdown"] .merak-code-block[data-menu-open="true"] .merak-code-toolbar {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+[data-merak-editor="markdown"] .merak-code-pre {
+  --bn-suggestion-surface: transparent;
+  margin: 0;
+  padding: 36px 22px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-radius: 10px;
+  font-family: "SFMono-Regular", Menlo, Consolas, "JetBrains Mono", "Liberation Mono", Monaco, monospace;
+  font-size: 13.6px;
+  line-height: 1.5;
+  tab-size: 2;
+}
+
+[data-merak-editor="markdown"]
+  .bn-block-content[data-content-type="codeBlock"]::before,
+[data-merak-editor="markdown"]
+  .bn-block-content[data-content-type="codeBlock"]::after {
+  content: none;
+}
+
+[data-merak-editor="markdown"]
+  .bn-block-content[data-content-type="codeBlock"]
+  code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: inherit;
+  font-size: inherit;
+}
+
+[data-merak-editor="markdown"] .merak-code-content {
+  display: block;
+  min-height: 1.5em;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  white-space: pre;
+}
+
+[data-merak-editor="markdown"] .merak-code-block[data-code-wrap="true"] .merak-code-pre {
+  overflow-x: hidden;
+}
+
+[data-merak-editor="markdown"] .merak-code-block[data-code-wrap="true"] .merak-code-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+[data-merak-editor="markdown"] .merak-code-content .shiki {
+  color: var(--bn-suggestion-token-color, var(--shiki-light));
+  font-style: var(--shiki-light-font-style, inherit);
+  font-weight: var(--shiki-light-font-weight, inherit);
+}
+
+[data-merak-editor="markdown"][data-merak-theme="dark"] .merak-code-content .shiki {
+  color: var(--bn-suggestion-token-color, var(--shiki-dark));
+  font-style: var(--shiki-dark-font-style, inherit);
+  font-weight: var(--shiki-dark-font-weight, inherit);
+}
+
+/* Quiet Notion + and drag side handles */
+[data-merak-editor="markdown"] .bn-side-menu .bn-ak-button {
+  width: 22px;
+  height: 100%;
+  padding: 0;
+  border-radius: 5px;
+  color: var(--bn-colors-side-menu);
+  background: transparent;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+[data-merak-editor="markdown"] .bn-side-menu {
+  height: var(--merak-side-menu-height, 28px);
+  align-items: stretch;
+  gap: 2px;
+  padding-right: 10px;
+}
+
+/* Notion-style media placeholder bar ("Add image" / "Add file" / "Add video") */
+[data-merak-editor="markdown"] .bn-add-file-button {
+  height: 44px;
+  padding: 0 14px;
+  gap: 10px;
+  border-radius: 6px;
+  background-color: rgba(55, 53, 47, 0.04);
+  border: 1px solid rgba(55, 53, 47, 0.1);
+  color: #787774;
+  font-size: 13.5px;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+[data-merak-editor="markdown"] .bn-add-file-button:hover {
+  background-color: rgba(55, 53, 47, 0.07);
+  color: #37352f;
+}
+
+[data-merak-editor="markdown"][data-merak-theme="dark"] .bn-add-file-button {
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #9b9a97;
+}
+
+[data-merak-editor="markdown"][data-merak-theme="dark"] .bn-add-file-button:hover {
+  background-color: rgba(255, 255, 255, 0.07);
+  color: #f0efed;
+}
+
+[data-merak-editor="markdown"] .bn-side-menu .bn-ak-button:hover {
+  background-color: rgba(55, 53, 47, 0.06);
+  color: #37352f;
+}
+
+[data-merak-editor="markdown"][data-merak-theme="dark"] .bn-side-menu .bn-ak-button:hover {
+  background-color: rgba(255, 255, 255, 0.07);
+  color: #f0efed;
+}
+
+[data-merak-editor="markdown"] [data-merak-drag-handle="true"]:hover,
+[data-merak-editor="markdown"] [data-merak-drag-handle="true"][data-active="true"] {
+  background-color: rgba(55, 53, 47, 0.08);
+  color: #37352f;
+}
+
+[data-merak-editor="markdown"][data-merak-theme="dark"] [data-merak-drag-handle="true"]:hover,
+[data-merak-editor="markdown"][data-merak-theme="dark"] [data-merak-drag-handle="true"][data-active="true"] {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #f0efed;
+}
+
+/* Page appearance overrides (Default / Serif / Mono, Small text, Full width) */
+[data-merak-editor="markdown"][data-merak-doc-font="serif"] .bn-container {
+  --bn-font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+}
+
+[data-merak-editor="markdown"][data-merak-doc-font="mono"] .bn-container {
+  --bn-font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+[data-merak-editor="markdown"][data-merak-doc-small="true"] .bn-editor {
+  font-size: 14px;
+}
+
+[data-merak-editor="markdown"][data-merak-doc-full="true"] .bn-editor {
+  max-width: min(1180px, 100%);
+  padding-inline: 54px;
+}
+
+[data-merak-editor="markdown"] [data-is-empty-and-focused]::before,
+[data-merak-editor="markdown"]
+  .bn-editor
+  .bn-inline-content:has(> .ProseMirror-trailingBreak:only-child)::before {
+  font-style: normal;
+  color: var(--bn-colors-side-menu);
+}
+
+[data-merak-editor="markdown"][data-marquee-dragging="true"] {
+  user-select: none;
+}
+
+[data-merak-editor="markdown"] [data-node-type="blockContainer"][data-merak-selected="true"] {
+  position: relative;
+}
+
+[data-merak-editor="markdown"]
+  [data-node-type="blockContainer"][data-merak-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0px -4px;
+  border-radius: 5px;
+  background: rgba(35, 131, 226, 0.14);
+  pointer-events: none;
+  z-index: 2;
+}
+
+[data-merak-editor="markdown"][data-merak-theme="dark"]
+  [data-node-type="blockContainer"][data-merak-selected="true"]::after {
+  background: rgba(78, 148, 236, 0.16);
+}
+
+/* Notion-style floating text formatting toolbar */
+.bn-ak-toolbar.bn-ak-toolbar {
+  padding: 4px;
+  gap: 2px;
+  border: none;
+  border-radius: 10px;
+  background-color: #ffffff;
+  color: #37352f;
+  box-shadow:
+    0 0 0 1px rgba(15, 15, 15, 0.06),
+    0 10px 24px rgba(15, 15, 15, 0.14);
+}
+
+.dark .bn-ak-toolbar.bn-ak-toolbar,
+.bn-ak-toolbar.bn-ak-toolbar:where(.dark, .dark *),
+[data-theme="dark"] .bn-ak-toolbar.bn-ak-toolbar,
+[data-merak-theme="dark"] .bn-ak-toolbar.bn-ak-toolbar {
+  background-color: #252525;
+  color: #f0efed;
+  box-shadow:
+    0 0 0 1px #383836,
+    0 14px 28px -6px rgba(0, 0, 0, 0.42),
+    0 2px 4px -1px rgba(0, 0, 0, 0.24);
+}
+
+.bn-ak-toolbar .bn-ak-button {
+  height: 28px;
+  min-width: 28px;
+  padding-inline: 6px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: inherit;
+  background: transparent;
+  box-shadow: none;
+}
+
+.bn-ak-toolbar .bn-ak-button:hover {
+  background-color: rgba(55, 53, 47, 0.07);
+  color: #37352f;
+}
+
+.dark .bn-ak-toolbar .bn-ak-button:hover,
+.bn-ak-toolbar .bn-ak-button:hover:where(.dark, .dark *),
+[data-theme="dark"] .bn-ak-toolbar .bn-ak-button:hover,
+[data-merak-theme="dark"] .bn-ak-toolbar .bn-ak-button:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #f0efed;
+}
+
+.bn-ak-toolbar .bn-ak-button[data-selected] {
+  color: #2383e2;
+  background-color: rgba(35, 131, 226, 0.12);
+  box-shadow: none;
+}
+
+.dark .bn-ak-toolbar .bn-ak-button[data-selected],
+.bn-ak-toolbar .bn-ak-button[data-selected]:where(.dark, .dark *),
+[data-theme="dark"] .bn-ak-toolbar .bn-ak-button[data-selected],
+[data-merak-theme="dark"] .bn-ak-toolbar .bn-ak-button[data-selected] {
+  color: #4e94ec;
+  background-color: rgba(78, 148, 236, 0.16);
+  box-shadow: none;
+}
+
+.bn-ak-toolbar .bn-ak-separator {
+  height: 18px;
+  border-color: rgba(55, 53, 47, 0.1);
+}
+
+.dark .bn-ak-toolbar .bn-ak-separator,
+.bn-ak-toolbar .bn-ak-separator:where(.dark, .dark *),
+[data-theme="dark"] .bn-ak-toolbar .bn-ak-separator,
+[data-merak-theme="dark"] .bn-ak-toolbar .bn-ak-separator {
+  border-color: #383836;
+}
+
+/* Unified Notion-style surface & hover for all BlockNote dropdown menus (drag-handle, format, slash) */
+.bn-ak-menu.bn-ak-menu {
+  padding: 6px;
+  border: none;
+  border-radius: 10px;
+  background-color: #ffffff;
+  color: #37352f;
+  box-shadow:
+    0 0 0 1px rgba(15, 15, 15, 0.06),
+    0 10px 26px rgba(15, 15, 15, 0.14);
+}
+
+.dark .bn-ak-menu.bn-ak-menu,
+.bn-ak-menu.bn-ak-menu:where(.dark, .dark *),
+[data-theme="dark"] .bn-ak-menu.bn-ak-menu,
+[data-merak-theme="dark"] .bn-ak-menu.bn-ak-menu {
+  background-color: #252525;
+  color: #f0efed;
+  box-shadow:
+    0 0 0 1px #383836,
+    0 14px 28px -6px rgba(0, 0, 0, 0.42),
+    0 2px 4px -1px rgba(0, 0, 0, 0.24);
+}
+
+.bn-ak-menu.bn-ak-menu .bn-ak-menu-item {
+  min-height: 30px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  gap: 8px;
+  align-items: center;
+  font-size: 13.5px;
+  color: inherit;
+}
+
+.bn-ak-menu.bn-ak-menu .bn-ak-menu-item:is(:hover, [aria-selected="true"], [data-active-item]) {
+  background-color: rgba(55, 53, 47, 0.07);
+  color: #37352f;
+}
+
+.dark .bn-ak-menu.bn-ak-menu .bn-ak-menu-item:is(:hover, [aria-selected="true"], [data-active-item]),
+.bn-ak-menu.bn-ak-menu
+  .bn-ak-menu-item:is(:hover, [aria-selected="true"], [data-active-item]):where(.dark, .dark *),
+[data-theme="dark"]
+  .bn-ak-menu.bn-ak-menu
+  .bn-ak-menu-item:is(:hover, [aria-selected="true"], [data-active-item]),
+[data-merak-theme="dark"]
+  .bn-ak-menu.bn-ak-menu
+  .bn-ak-menu-item:is(:hover, [aria-selected="true"], [data-active-item]) {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #f0efed;
+}
+
+/* Slash suggestion menu density */
+.bn-ak-menu.bn-suggestion-menu {
+  width: 320px;
+  max-height: 360px;
+}
+
+.bn-ak-menu.bn-suggestion-menu .bn-ak-menu-item {
+  min-height: 32px;
+}
+
+.bn-ak-menu.bn-suggestion-menu .bn-ak-suggestion-menu-item-subtitle {
+  display: none;
+}
+
+.bn-ak-menu.bn-suggestion-menu .bn-ak-suggestion-menu-item-section[data-position="left"] {
+  padding: 2px;
+  width: 20px;
+  height: 20px;
+  color: #787774;
+}
+
+.dark .bn-ak-menu.bn-suggestion-menu .bn-ak-suggestion-menu-item-section[data-position="left"],
+[data-theme="dark"]
+  .bn-ak-menu.bn-suggestion-menu
+  .bn-ak-suggestion-menu-item-section[data-position="left"],
+[data-merak-theme="dark"]
+  .bn-ak-menu.bn-suggestion-menu
+  .bn-ak-suggestion-menu-item-section[data-position="left"] {
+  color: #ada9a3;
+}
+
+.bn-ak-menu.bn-suggestion-menu .bn-ak-suggestion-menu-item-section[data-position="right"] {
+  box-shadow: none;
+  background: transparent;
+  padding-inline: 4px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  color: #9b9a97;
+}
+
+.dark .bn-ak-menu.bn-suggestion-menu .bn-ak-suggestion-menu-item-section[data-position="right"],
+[data-theme="dark"]
+  .bn-ak-menu.bn-suggestion-menu
+  .bn-ak-suggestion-menu-item-section[data-position="right"],
+[data-merak-theme="dark"]
+  .bn-ak-menu.bn-suggestion-menu
+  .bn-ak-suggestion-menu-item-section[data-position="right"] {
+  color: #7d7a75;
+}
+
+.bn-ak-menu .bn-ak-menu-group-label,
+.bn-ak-menu.bn-suggestion-menu [role="group"] > div:first-child:not([role]) {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #787774;
+  padding: 6px 8px 3px;
+}
+
+.dark .bn-ak-menu .bn-ak-menu-group-label,
+.dark .bn-ak-menu.bn-suggestion-menu [role="group"] > div:first-child:not([role]),
+[data-theme="dark"] .bn-ak-menu .bn-ak-menu-group-label,
+[data-theme="dark"] .bn-ak-menu.bn-suggestion-menu [role="group"] > div:first-child:not([role]),
+[data-merak-theme="dark"] .bn-ak-menu .bn-ak-menu-group-label,
+[data-merak-theme="dark"]
+  .bn-ak-menu.bn-suggestion-menu
+  [role="group"]
+  > div:first-child:not([role]) {
+  color: #7d7a75;
+}
+
+[data-merak-editor="html"] .cm-editor {
   height: 100%;
   font-size: 13px;
 }
 
-.merak-cm-host .cm-scroller {
+[data-merak-editor="html"] .cm-scroller {
   overflow: auto;
   font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
 }
 
-.merak-excalidraw-host .excalidraw {
+[data-merak-editor="excalidraw"] .excalidraw {
   height: 100%;
   width: 100%;
 }
 
-.merak-canvas-host .react-flow__node {
+[data-merak-editor="canvas"] .react-flow {
+  --xy-background-color-default: #f4f2ed;
+  --xy-edge-stroke-default: rgba(68, 64, 60, 0.45);
+  --xy-edge-stroke-selected-default: #2383e2;
+  --xy-selection-background-color-default: rgba(28, 25, 23, 0.06);
+  --xy-selection-border-default: 1.5px dashed rgba(28, 25, 23, 0.55);
+}
+
+[data-merak-editor="canvas"][data-merak-theme="dark"] .react-flow {
+  --xy-background-color-default: #181715;
+  --xy-edge-stroke-default: rgba(214, 211, 209, 0.42);
+  --xy-edge-stroke-selected-default: #4e94ec;
+  --xy-selection-background-color-default: rgba(250, 250, 249, 0.08);
+  --xy-selection-border-default: 1.5px dashed rgba(250, 250, 249, 0.55);
+}
+
+[data-merak-editor="canvas"][data-merak-canvas-mode="pan"] .react-flow__pane {
+  cursor: grab;
+}
+
+[data-merak-editor="canvas"][data-merak-canvas-mode="pan"] .react-flow__pane:active {
+  cursor: grabbing;
+}
+
+[data-merak-editor="canvas"] .react-flow__node {
   padding: 0;
   border: none;
   background: transparent;
   box-shadow: none;
+}
+
+[data-merak-editor="canvas"] .react-flow__handle {
+  width: 8px;
+  height: 8px;
+  opacity: 0;
+  border-width: 1.5px;
+  transition: opacity 120ms ease;
+}
+
+[data-merak-editor="canvas"] .react-flow__node:hover .react-flow__handle,
+[data-merak-editor="canvas"] .react-flow__node.selected .react-flow__handle,
+[data-merak-editor="canvas"] .react-flow__handle.connectingfrom,
+[data-merak-editor="canvas"] .react-flow__handle.connectingto {
+  opacity: 1;
+}
+
+[data-merak-editor="canvas"] .react-flow__selection {
+  border-radius: 14px;
+}
+
+[data-merak-editor="canvas"] .react-flow__minimap {
+  left: 16px;
+  right: auto;
+  bottom: 64px;
+  width: 168px;
+  height: 110px;
+  margin: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #383836;
+  background-color: #1f1d1a;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.36);
+}
+
+[data-merak-editor="canvas"][data-merak-theme="light"] .react-flow__minimap {
+  border-color: rgba(55, 53, 47, 0.14);
+  background-color: #fbfaf7;
+  box-shadow: 0 10px 24px rgba(15, 15, 15, 0.12);
+}
+
+[data-merak-editor="canvas"] .react-flow__attribution {
+  display: none;
 }

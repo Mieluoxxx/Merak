@@ -3,10 +3,15 @@ import react from "@vitejs/plugin-react";
 import stylex from "@stylexjs/unplugin/vite";
 import { defineConfig } from "vite";
 
+const apiTarget = process.env.MERAK_API_URL ?? "http://localhost:3000";
+const wsTarget = apiTarget.replace(/^http/, "ws");
+
 export default defineConfig({
   plugins: [
     stylex({
-      useCSSLayers: true,
+      useCSSLayers: {
+        before: ["reset", "ui-sdk", "thirdparty"],
+      },
       externalPackages: ["@merak/ui"],
       unstable_moduleResolution: {
         type: "commonJS",
@@ -18,13 +23,13 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://localhost:3000",
-      "/ui-sdk": "http://localhost:3000",
+      "/api": apiTarget,
+      "/ui-sdk": apiTarget,
       "/ws": {
-        target: "ws://localhost:3000",
+        target: wsTarget,
         ws: true,
       },
-      "/mcp": "http://localhost:3000",
+      "/mcp": apiTarget,
     },
   },
 });

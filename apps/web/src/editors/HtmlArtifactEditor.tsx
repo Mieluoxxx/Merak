@@ -25,7 +25,6 @@ import {
   Eye,
   Monitor,
   RefreshCw,
-  Save,
   ShieldCheck,
   Smartphone,
   Tablet,
@@ -279,7 +278,6 @@ export function HtmlArtifactEditor({
   const [reloadNonce, setReloadNonce] = useState(0);
   const [consoleOpen, setConsoleOpen] = useState(false);
   const [consoleEntries, setConsoleEntries] = useState<ArtifactConsoleEntry[]>([]);
-  const [saving, setSaving] = useState(false);
 
   const cmContainerRef = useRef<HTMLDivElement | null>(null);
   const cmViewRef = useRef<EditorView | null>(null);
@@ -317,12 +315,7 @@ export function HtmlArtifactEditor({
 
   const handleSave = useCallback(async () => {
     if (!onSaveRef.current || readOnly) return;
-    setSaving(true);
-    try {
-      await onSaveRef.current(codeRef.current);
-    } finally {
-      setSaving(false);
-    }
+    await onSaveRef.current(codeRef.current);
   }, [readOnly]);
 
   useGlobalSaveShortcut(Boolean(onSave) && !readOnly, handleSave);
@@ -437,7 +430,7 @@ export function HtmlArtifactEditor({
         </span>
         <span>{code.split("\n").length} lines</span>
       </div>
-      <div ref={cmContainerRef} className="merak-cm-host" {...stylex.props(styles.cmHost)} />
+      <div ref={cmContainerRef} data-merak-editor="html" {...stylex.props(styles.cmHost)} />
     </div>
   );
 
@@ -548,32 +541,22 @@ export function HtmlArtifactEditor({
         </ToolbarGroup>
 
         <Inline gap="xs">
-          <Button
-            onClick={() => setReloadNonce((prev) => prev + 1)}
-            aria-label="Reload preview"
-          >
+          <Button onClick={() => setReloadNonce((prev) => prev + 1)}>
             <RefreshCw size={14} />
-            Reload
+            <span>Reload</span>
           </Button>
           <Button
             onClick={() => setConsoleOpen((prev) => !prev)}
             aria-pressed={consoleOpen}
-            aria-label="Toggle artifact console"
           >
             <Terminal size={14} />
-            Console
+            <span>Console</span>
             {consoleEntries.length > 0 ? (
               <Badge tone={errorCount > 0 ? "danger" : "neutral"}>
                 {consoleEntries.length}
               </Badge>
             ) : null}
           </Button>
-          {onSave && !readOnly ? (
-            <Button disabled={saving} onClick={handleSave}>
-              <Save size={14} />
-              {saving ? "Saving..." : "Save"}
-            </Button>
-          ) : null}
         </Inline>
       </Toolbar>
 

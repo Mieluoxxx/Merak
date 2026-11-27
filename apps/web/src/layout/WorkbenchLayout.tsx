@@ -70,7 +70,7 @@ export interface WorkbenchLayoutProps {
 const styles = stylex.create({
   shell: {
     display: "grid",
-    gridTemplateColumns: "272px 1fr",
+    gridTemplateColumns: "264px 1fr",
     height: "100%",
     width: "100%",
     backgroundColor: colors.bg,
@@ -91,9 +91,11 @@ const styles = stylex.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: space.md,
-    paddingBlock: space.sm,
-    paddingInline: space.lg,
-    borderBottom: `1px solid ${colors.border}`,
+    height: "44px",
+    paddingBlock: 0,
+    paddingInline: "14px",
+    borderBottomWidth: 0,
+    borderBottomStyle: "none",
     backgroundColor: colors.bg,
     flexShrink: 0,
   },
@@ -103,19 +105,33 @@ const styles = stylex.create({
     gap: space.sm,
     minWidth: 0,
   },
+  headerIcon: {
+    display: "inline-flex",
+    alignItems: "center",
+    color: colors.textMuted,
+    flexShrink: 0,
+  },
   headerTitle: {
     margin: 0,
     fontSize: font.sizeMd,
     fontWeight: 600,
+    letterSpacing: "-0.01em",
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
+  },
+  headerActionButton: {
+    height: "28px",
+    paddingInline: space.sm,
+    fontSize: font.sizeXs,
+    color: colors.textMuted,
   },
   main: {
     flex: "1 1 auto",
     minHeight: 0,
     overflowY: "auto",
-    padding: space.xl,
+    paddingBlock: space.lg,
+    paddingInline: space.xl,
     display: "flex",
     flexDirection: "column",
   },
@@ -126,6 +142,7 @@ const DEFAULT_TITLES: Record<NodeType, string> = {
   excalidraw: "Untitled Whiteboard",
   html: "Untitled HTML Artifact",
   canvas: "Untitled Canvas",
+  folder: "Untitled Folder",
 };
 
 export function WorkbenchLayout({
@@ -319,7 +336,9 @@ export function WorkbenchLayout({
         <div {...stylex.props(styles.contentColumn)}>
           <header {...stylex.props(styles.header)}>
             <div {...stylex.props(styles.headerTitleGroup)}>
-              <Sparkles size={16} />
+              <span {...stylex.props(styles.headerIcon)}>
+                <Sparkles size={15} />
+              </span>
               <h2 {...stylex.props(styles.headerTitle)}>{resolvedHeaderTitle}</h2>
             </div>
 
@@ -327,14 +346,16 @@ export function WorkbenchLayout({
               {headerActions}
 
               <Button
+                data-variant="ghost"
                 aria-label="Open command palette"
                 aria-keyshortcuts={shortcutHint.ariaKeyshortcuts}
                 onClick={() => {
                   setCommandInitialQuery("");
                   setCommandOpen(true);
                 }}
+                {...stylex.props(styles.headerActionButton)}
               >
-                <Search size={14} />
+                <Search size={13} />
                 <span>{shortcutHint.text}</span>
               </Button>
 
@@ -363,8 +384,13 @@ export function WorkbenchLayout({
                 </Badge>
               ) : null}
 
-              <Button aria-label={`Theme: ${theme}`} onClick={cycleTheme}>
-                <SunMoon size={14} />
+              <Button
+                data-variant="ghost"
+                aria-label={`Theme: ${theme}`}
+                onClick={cycleTheme}
+                {...stylex.props(styles.headerActionButton)}
+              >
+                <SunMoon size={13} />
                 <span>{theme}</span>
               </Button>
             </Inline>

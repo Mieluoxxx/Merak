@@ -142,7 +142,7 @@ export const nodes = sqliteTable(
     parentId: text("parent_id").references((): AnySQLiteColumn => nodes.id, {
       onDelete: "cascade",
     }),
-    type: text("type", { enum: ["doc", "excalidraw", "html", "canvas"] }).notNull(),
+    type: text("type", { enum: ["doc", "excalidraw", "html", "canvas", "folder"] }).notNull(),
     title: text("title").notNull(),
     icon: text("icon"),
     sortOrder: text("sort_order").notNull().default("i"),

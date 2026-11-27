@@ -6,10 +6,13 @@ import {
   filterSuggestionItems,
   insertOrUpdateBlockForSlashMenu,
 } from "@blocknote/core";
+import { SyntaxHighlightingExtension } from "@blocknote/core/extensions";
 import {
   createReactBlockSpec,
   type DefaultReactSuggestionItem,
+  FilePanelController,
   getDefaultReactSlashMenuItems,
+  SideMenuController,
   SuggestionMenuController,
   useCreateBlockNote,
 } from "@blocknote/react";
@@ -23,7 +26,6 @@ import {
 import {
   Badge,
   Button,
-  Card,
   Dialog,
   DialogBackdrop,
   DialogClose,
@@ -35,22 +37,44 @@ import {
   FieldLabel,
   Inline,
   Input,
+  Menu,
+  MenuContent,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuItem,
+  MenuItemIcon,
+  MenuTrigger,
   Stack,
   Toolbar,
+  toast,
 } from "@merak/ui";
-import { colors, font, radius, shadow, space } from "@merak/ui/tokens.stylex";
+import { colors, font, radius, shadow, space, zIndex } from "@merak/ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import {
   Blocks,
+  CheckSquare,
+  ChevronDown,
   ChevronRight,
+  Code2,
+  Copy,
+  CopyPlus,
   ExternalLink,
   FilePlus2,
   FileText,
+  Folder,
+  Heading1,
+  Heading2,
+  Heading3,
   Link2,
+  List,
+  ListOrdered,
   Network,
   PenTool,
-  Save,
+  Quote,
   Sparkles,
+  Trash2,
+  Type,
+  X,
 } from "lucide-react";
 import {
   createContext,
@@ -61,6 +85,18 @@ import {
   useRef,
   useState,
 } from "react";
+import { countWordsAndChars, extractBlocksPlainText } from "./blockMetrics.js";
+import { cloneBlocksForDuplicate } from "./blockSelection.js";
+import {
+  DocAppearancePopover,
+  loadDocAppearance,
+  saveDocAppearance,
+  type DocAppearanceSettings,
+} from "./DocAppearancePopover.js";
+import { createMerakCodeBlockSpec } from "./MerakCodeBlock.js";
+import { createMerakCodeHighlighter } from "./codeHighlighter.js";
+import { MerakFilePanel } from "./MerakFilePanel.js";
+import { MerakSideMenu } from "./MerakSideMenu.js";
 import { parseCanvasContent } from "./canvasHelpers.js";
 import "./editors.css";
 import { countActiveExcalidrawElements, parseExcalidrawContent } from "./excalidrawHelpers.js";
@@ -79,6 +115,7 @@ import {
   splitMarkdownWithDirectives,
 } from "./markdownHelpers.js";
 import { formatMediaUrl, isNodeType, NODE_TYPE_META, useGlobalSaveShortcut } from "./shared.js";
+import { useBlockMarqueeSelection } from "./useBlockMarqueeSelection.js";
 
 interface MarkdownBlockContextValue {
   theme: "light" | "dark";
@@ -97,11 +134,12 @@ const styles = stylex.create({
     flexDirection: "column",
     height: "100%",
     minHeight: "440px",
-    backgroundColor: colors.bg,
+    backgroundColor: "transparent",
     color: colors.text,
     fontFamily: font.sans,
-    border: `1px solid ${colors.border}`,
-    borderRadius: radius.lg,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderRadius: 0,
     overflow: "hidden",
   },
   toolbar: {
@@ -110,19 +148,21 @@ const styles = stylex.create({
     justifyContent: "space-between",
     flexWrap: "wrap",
     gap: space.sm,
-    paddingBlock: space.sm,
-    paddingInline: space.md,
-    backgroundColor: colors.bgSubtle,
-    borderBottom: `1px solid ${colors.border}`,
+    width: "100%",
+    maxWidth: "720px",
+    marginInline: "auto",
+    paddingBlock: "6px",
+    paddingInline: "24px",
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    borderStyle: "none",
+    borderRadius: 0,
+    flexShrink: 0,
   },
-  titleText: {
-    fontSize: font.sizeSm,
-    fontWeight: 600,
-    color: colors.text,
-    maxWidth: "240px",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
+  toolbarAction: {
+    height: "28px",
+    paddingInline: "10px",
+    fontSize: font.sizeXs,
   },
   hintText: {
     fontSize: font.sizeXs,
@@ -132,7 +172,7 @@ const styles = stylex.create({
     flex: 1,
     minHeight: 0,
     overflowY: "auto",
-    backgroundColor: colors.bg,
+    backgroundColor: "transparent",
   },
   childCardButton: {
     display: "flex",
@@ -142,7 +182,9 @@ const styles = stylex.create({
     paddingBlock: space.sm,
     paddingInline: space.md,
     borderRadius: radius.md,
-    border: `1px solid ${colors.border}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.border,
     backgroundColor: colors.bgSubtle,
     color: colors.text,
     cursor: "pointer",
@@ -159,7 +201,9 @@ const styles = stylex.create({
     width: "100%",
     marginBlock: space.sm,
     borderRadius: radius.lg,
-    border: `1px solid ${colors.border}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.border,
     backgroundColor: colors.bgElevated,
     boxShadow: shadow.sm,
     overflow: "hidden",
@@ -172,7 +216,9 @@ const styles = stylex.create({
     paddingBlock: space.xs,
     paddingInline: space.md,
     backgroundColor: colors.bgSubtle,
-    borderBottom: `1px solid ${colors.borderSubtle}`,
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: colors.borderSubtle,
   },
   embedTitle: {
     fontSize: font.sizeSm,
@@ -193,7 +239,8 @@ const styles = stylex.create({
     display: "block",
     width: "100%",
     height: "100%",
-    border: "none",
+    borderWidth: 0,
+    borderStyle: "none",
   },
   excerptText: {
     margin: 0,
@@ -216,7 +263,9 @@ const styles = stylex.create({
     width: "min(440px, calc(100vw - 32px))",
     backgroundColor: colors.bgElevated,
     color: colors.text,
-    border: `1px solid ${colors.border}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.border,
     borderRadius: radius.lg,
     boxShadow: shadow.lg,
     padding: space.xl,
@@ -232,16 +281,99 @@ const styles = stylex.create({
     fontSize: font.sizeSm,
     color: colors.textMuted,
   },
-  dialogActions: {
+  dialogFooter: {
     display: "flex",
     justifyContent: "flex-end",
-    gap: space.sm,
-    marginTop: space.md,
+    gap: "10px",
+    marginTop: "4px",
+    paddingTop: "14px",
+    borderTopWidth: "1px",
+    borderTopStyle: "solid",
+    borderTopColor: colors.borderSubtle,
+  },
+  marqueeBox: {
+    position: "fixed",
+    backgroundColor: "rgba(35, 131, 226, 0.14)",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: "rgba(35, 131, 226, 0.38)",
+    borderRadius: "2px",
+    pointerEvents: "none",
+    zIndex: zIndex.dropdown,
+  },
+  batchBar: {
+    position: "fixed",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "4px",
+    height: "36px",
+    paddingBlock: 0,
+    paddingInline: "6px",
+    borderRadius: radius.md,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.border,
+    backgroundColor: colors.bgElevated,
+    boxShadow: shadow.md,
+    zIndex: zIndex.popover,
+    color: colors.text,
+  },
+  batchCount: {
+    paddingInline: "8px",
+    fontSize: font.sizeXs,
+    fontWeight: 500,
+    color: colors.textMuted,
+    whiteSpace: "nowrap",
+  },
+  batchDivider: {
+    width: "1px",
+    height: "16px",
+    backgroundColor: colors.borderSubtle,
+    marginInline: "2px",
+    flexShrink: 0,
+  },
+  batchActionButton: {
+    height: "26px",
+    paddingInline: "8px",
+    fontSize: font.sizeXs,
+    borderRadius: "6px",
+  },
+  batchDeleteButton: {
+    height: "26px",
+    paddingInline: "8px",
+    fontSize: font.sizeXs,
+    borderRadius: "6px",
+    color: colors.danger,
+  },
+  batchCloseButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "24px",
+    height: "24px",
+    padding: 0,
+    borderRadius: "6px",
+  },
+  batchMenuContent: {
+    minWidth: "200px",
   },
 });
 
+const NON_CONVERTIBLE_BLOCK_TYPES = new Set([
+  "merakChild",
+  "merakEmbed",
+  "image",
+  "file",
+  "video",
+  "audio",
+  "table",
+  "divider",
+]);
+
 function NodeTypeIcon({ type, size = 15 }: { type: NodeType; size?: number }) {
   switch (type) {
+    case "folder":
+      return <Folder size={size} />;
     case "doc":
       return <FileText size={size} />;
     case "excalidraw":
@@ -409,6 +541,14 @@ function EmbeddedNodeView({ nodeId, height }: { nodeId: string; height: number }
     }
 
     switch (resolved.type) {
+      case "folder":
+        return (
+          <div {...stylex.props(styles.embedBody)}>
+            <p {...stylex.props(styles.excerptText)}>
+              Workspace folder — click Open to browse nested pages and subfolders.
+            </p>
+          </div>
+        );
       case "doc":
         return (
           <div {...stylex.props(styles.embedBody)}>
@@ -497,7 +637,7 @@ const createMerakChildBlock = createReactBlockSpec(
       nodeId: { default: "" },
       nodeType: {
         default: "doc" as const,
-        values: ["doc", "excalidraw", "html", "canvas"] as const,
+        values: ["doc", "excalidraw", "html", "canvas", "folder"] as const,
       },
       title: { default: "Untitled Page" },
     },
@@ -563,6 +703,7 @@ const createMerakEmbedBlock = createReactBlockSpec(
 const merakMarkdownSchema = BlockNoteSchema.create({
   blockSpecs: {
     ...defaultBlockSpecs,
+    codeBlock: createMerakCodeBlockSpec(),
     merakChild: createMerakChildBlock(),
     merakEmbed: createMerakEmbedBlock(),
   },
@@ -571,7 +712,10 @@ const merakMarkdownSchema = BlockNoteSchema.create({
 type MerakMarkdownEditorInstance = typeof merakMarkdownSchema.BlockNoteEditor;
 type MerakPartialBlock = typeof merakMarkdownSchema.PartialBlock;
 
-function serializeEditorToMerakMarkdown(editor: MerakMarkdownEditorInstance): string {
+function serializeEditorToMerakMarkdown(
+  editor: MerakMarkdownEditorInstance,
+  blocks: typeof editor.document = editor.document,
+): string {
   const parts: string[] = [];
   let standardGroup: typeof editor.document = [];
 
@@ -584,7 +728,7 @@ function serializeEditorToMerakMarkdown(editor: MerakMarkdownEditorInstance): st
     standardGroup = [];
   };
 
-  for (const block of editor.document) {
+  for (const block of blocks) {
     if (block.type === "merakChild") {
       flushStandardGroup();
       if (block.props.nodeId) {
@@ -663,7 +807,10 @@ export function MarkdownEditor({
   onOpenNode,
   resolveNode,
 }: AssetEditorProps) {
-  const [saving, setSaving] = useState(false);
+  const [docAppearance, setDocAppearance] = useState<DocAppearanceSettings>(() =>
+    loadDocAppearance(),
+  );
+  const [activeHandleBlockId, setActiveHandleBlockId] = useState<string | null>(null);
   const [embedDialogOpen, setEmbedDialogOpen] = useState(false);
   const [embedNodeId, setEmbedNodeId] = useState("");
   const [embedHeight, setEmbedHeight] = useState(String(DEFAULT_EMBED_HEIGHT));
@@ -681,11 +828,29 @@ export function MarkdownEditor({
   onCreateChildRef.current = onCreateChild;
 
   const isHydratingRef = useRef(false);
+  const hydratedNodeIdRef = useRef<string | null>(null);
   const lastEmittedMarkdownRef = useRef<string>(node.content);
+  const editorScrollRef = useRef<HTMLDivElement>(null);
+  const selectionControlRef = useRef<{
+    setSelectedIds: (ids: string[]) => void;
+    clearSelection: () => void;
+  }>({
+    setSelectedIds: () => {},
+    clearSelection: () => {},
+  });
+
+  const syntaxHighlighting = useMemo(
+    () =>
+      SyntaxHighlightingExtension({
+        createHighlighter: createMerakCodeHighlighter,
+      }),
+    [],
+  );
 
   const editor = useCreateBlockNote(
     {
       schema: merakMarkdownSchema,
+      extensions: [syntaxHighlighting],
       uploadFile: async (file: File) => {
         const media = await onUploadMediaRef.current(file);
         return formatMediaUrl(media);
@@ -694,8 +859,15 @@ export function MarkdownEditor({
     [],
   );
 
-  // Hydrate BlockNote blocks from clean Markdown on mount and whenever `node.id` changes.
+  // Hydrate BlockNote blocks from clean Markdown on mount, when `node.id` changes, or when server/draft content updates externally.
   useEffect(() => {
+    if (
+      hydratedNodeIdRef.current === node.id &&
+      node.content === lastEmittedMarkdownRef.current
+    ) {
+      return;
+    }
+    hydratedNodeIdRef.current = node.id;
     isHydratingRef.current = true;
     try {
       const nextBlocks = parseMerakMarkdownToBlocks(editor, node.content);
@@ -706,7 +878,7 @@ export function MarkdownEditor({
         isHydratingRef.current = false;
       });
     }
-  }, [editor, node.id]);
+  }, [editor, node.id, node.content]);
 
   const handleEditorChange = useCallback(() => {
     if (isHydratingRef.current || readOnly) return;
@@ -719,17 +891,81 @@ export function MarkdownEditor({
 
   const handleSave = useCallback(async () => {
     if (!onSaveRef.current || readOnly) return;
-    setSaving(true);
-    try {
-      const nextMarkdown = serializeEditorToMerakMarkdown(editor);
-      lastEmittedMarkdownRef.current = nextMarkdown;
-      await onSaveRef.current(nextMarkdown);
-    } finally {
-      setSaving(false);
-    }
+    const nextMarkdown = serializeEditorToMerakMarkdown(editor);
+    lastEmittedMarkdownRef.current = nextMarkdown;
+    await onSaveRef.current(nextMarkdown);
   }, [editor, readOnly]);
 
   useGlobalSaveShortcut(Boolean(onSave) && !readOnly, handleSave);
+
+  const handleAppearanceChange = useCallback((next: DocAppearanceSettings) => {
+    setDocAppearance(next);
+    saveDocAppearance(next);
+  }, []);
+
+  const handleCopyPageMarkdown = useCallback(async () => {
+    try {
+      const md = serializeEditorToMerakMarkdown(editor);
+      await navigator.clipboard.writeText(md);
+      toast.success("Copied page Markdown");
+    } catch {
+      toast.error("Failed to copy page Markdown");
+    }
+  }, [editor]);
+
+  const getPageStats = useCallback(() => {
+    return countWordsAndChars(extractBlocksPlainText(editor.document));
+  }, [editor]);
+
+  const renderSideMenu = useCallback(
+    () => <MerakSideMenu onActiveBlockChange={setActiveHandleBlockId} />,
+    [],
+  );
+
+  const sideMenuFloatingOptions = useMemo(
+    () => ({
+      useFloatingOptions: {
+        middleware: [
+          {
+            name: "merakAlignSideMenu",
+            fn({
+              elements,
+              rects,
+            }: {
+              elements: { reference?: unknown; floating?: unknown };
+              rects: { reference: { height: number }; floating: { height: number } };
+            }) {
+              const refNode =
+                elements.reference instanceof HTMLElement
+                  ? elements.reference
+                  : (elements.reference as { contextElement?: unknown } | undefined)?.contextElement;
+              let targetHeight = 28;
+              if (rects.reference.height <= 48) {
+                targetHeight = Math.max(28, Math.round(rects.reference.height));
+              } else if (refNode instanceof HTMLElement) {
+                const heading = refNode.querySelector<HTMLElement>(
+                  '.bn-block-content[data-content-type="heading"]',
+                );
+                if (heading) {
+                  const level = heading.getAttribute("data-level");
+                  targetHeight =
+                    level === "2" ? 35 : level === "3" ? 30 : level === "4" ? 28 : 43;
+                }
+              }
+              if (elements.floating instanceof HTMLElement) {
+                elements.floating.style.setProperty(
+                  "--merak-side-menu-height",
+                  `${targetHeight}px`,
+                );
+              }
+              return {};
+            },
+          },
+        ],
+      },
+    }),
+    [],
+  );
 
   const createAndInsertChildBlock = useCallback(
     async (type: NodeType, defaultTitle: string) => {
@@ -824,6 +1060,86 @@ export function MarkdownEditor({
     [createAndInsertChildBlock, editor],
   );
 
+  const handleBatchCopy = useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return;
+      const blocks = ids
+        .map((id) => editor.getBlock(id))
+        .filter((b): b is NonNullable<typeof b> => b !== undefined);
+      if (blocks.length === 0) return;
+      const markdown = serializeEditorToMerakMarkdown(editor, blocks);
+      try {
+        await navigator.clipboard.writeText(markdown);
+        toast.success(`Copied ${blocks.length} ${blocks.length === 1 ? "block" : "blocks"}`);
+      } catch {
+        toast.error("Unable to copy blocks to clipboard");
+      }
+    },
+    [editor],
+  );
+
+  const handleBatchDuplicate = useCallback(
+    (ids: string[]) => {
+      if (readOnly || ids.length === 0) return;
+      const blocks = ids
+        .map((id) => editor.getBlock(id))
+        .filter((b): b is NonNullable<typeof b> => b !== undefined);
+      if (blocks.length === 0) return;
+      const lastId = blocks[blocks.length - 1]?.id;
+      if (!lastId) return;
+      const clones = cloneBlocksForDuplicate(blocks) as MerakPartialBlock[];
+      const inserted = editor.insertBlocks(clones, lastId, "after");
+      selectionControlRef.current.setSelectedIds(inserted.map((b) => b.id));
+    },
+    [editor, readOnly],
+  );
+
+  const handleBatchDelete = useCallback(
+    (ids: string[]) => {
+      if (readOnly || ids.length === 0) return;
+      const idSet = new Set(ids);
+      const remainingTopLevel = editor.document.filter((b) => !idSet.has(b.id));
+      if (remainingTopLevel.length === 0) {
+        editor.replaceBlocks(ids, [{ type: "paragraph" }]);
+      } else {
+        editor.removeBlocks(ids);
+      }
+      selectionControlRef.current.clearSelection();
+    },
+    [editor, readOnly],
+  );
+
+  const handleBatchTurnInto = useCallback(
+    (ids: string[], targetType: string, props?: Record<string, unknown>) => {
+      if (readOnly || ids.length === 0) return;
+      for (const id of ids) {
+        const block = editor.getBlock(id);
+        if (!block || NON_CONVERTIBLE_BLOCK_TYPES.has(block.type)) continue;
+        editor.updateBlock(id, {
+          type: targetType,
+          ...(props ? { props } : {}),
+        } as MerakPartialBlock);
+      }
+    },
+    [editor, readOnly],
+  );
+
+  const marquee = useBlockMarqueeSelection({
+    containerRef: editorScrollRef,
+    getDocumentBlocks: () => editor.document,
+    readOnly,
+    nodeId: node.id,
+    highlightedBlockId: activeHandleBlockId,
+    onCopySelected: handleBatchCopy,
+    onDuplicateSelected: handleBatchDuplicate,
+    onDeleteSelected: handleBatchDelete,
+  });
+
+  selectionControlRef.current = {
+    setSelectedIds: marquee.setSelectedIds,
+    clearSelection: marquee.clearSelection,
+  };
+
   const blockContextValue = useMemo<MarkdownBlockContextValue>(
     () => ({ theme, onOpenNode, resolveNode }),
     [theme, onOpenNode, resolveNode],
@@ -837,8 +1153,6 @@ export function MarkdownEditor({
       >
         <Toolbar aria-label="Markdown toolbar" {...stylex.props(styles.toolbar)}>
           <Inline gap="sm">
-            <FileText size={16} />
-            <span {...stylex.props(styles.titleText)}>{node.title}</span>
             <Badge tone="accent">Markdown</Badge>
             {readOnly ? (
               <Badge tone="neutral">Read-only</Badge>
@@ -853,33 +1167,41 @@ export function MarkdownEditor({
             {!readOnly ? (
               <>
                 <Button
+                  data-variant="ghost"
+                  {...stylex.props(styles.toolbarAction)}
                   onClick={() => void createAndInsertChildBlock("doc", "Untitled Page")}
-                  aria-label="Insert subpage"
                 >
                   <FilePlus2 size={14} />
-                  Subpage
+                  <span>Subpage</span>
                 </Button>
                 <Button
+                  data-variant="ghost"
+                  {...stylex.props(styles.toolbarAction)}
                   onClick={() => setEmbedDialogOpen(true)}
-                  aria-label="Embed node"
                 >
                   <Sparkles size={14} />
-                  Embed
+                  <span>Embed</span>
                 </Button>
               </>
             ) : null}
-            {onSave && !readOnly ? (
-              <Button disabled={saving} onClick={handleSave}>
-                <Save size={14} />
-                {saving ? "Saving..." : "Save"}
-              </Button>
-            ) : null}
+            <DocAppearancePopover
+              settings={docAppearance}
+              onChange={handleAppearanceChange}
+              onCopyPageMarkdown={handleCopyPageMarkdown}
+              getPageStats={getPageStats}
+            />
           </Inline>
         </Toolbar>
 
         <div
-          className="merak-bn-container"
+          ref={editorScrollRef}
+          data-merak-editor="markdown"
           data-merak-theme={theme}
+          data-merak-doc-font={docAppearance.fontStyle}
+          data-merak-doc-small={docAppearance.smallText ? "true" : undefined}
+          data-merak-doc-full={docAppearance.fullWidth ? "true" : undefined}
+          data-marquee-dragging={marquee.isDragging ? "true" : undefined}
+          onPointerDown={marquee.handlePointerDown}
           {...stylex.props(styles.editorScroll)}
         >
           <BlockNoteView
@@ -887,15 +1209,204 @@ export function MarkdownEditor({
             theme={theme}
             editable={!readOnly}
             slashMenu={false}
+            sideMenu={false}
+            filePanel={false}
             onChange={handleEditorChange}
           >
             {!readOnly ? (
-              <SuggestionMenuController
-                triggerCharacter="/"
-                getItems={getCustomSlashMenuItems}
-              />
+              <>
+                <SideMenuController
+                  sideMenu={renderSideMenu}
+                  floatingUIOptions={sideMenuFloatingOptions}
+                />
+                <FilePanelController filePanel={MerakFilePanel} />
+                <SuggestionMenuController
+                  triggerCharacter="/"
+                  getItems={getCustomSlashMenuItems}
+                />
+              </>
             ) : null}
           </BlockNoteView>
+
+          {marquee.marqueeRect && marquee.marqueeRect.width > 0 && marquee.marqueeRect.height > 0 ? (
+            <div
+              data-slot="merak-marquee"
+              aria-hidden="true"
+              style={{
+                left: marquee.marqueeRect.left,
+                top: marquee.marqueeRect.top,
+                width: marquee.marqueeRect.width,
+                height: marquee.marqueeRect.height,
+              }}
+              {...stylex.props(styles.marqueeBox)}
+            />
+          ) : null}
+
+          {marquee.selectedIds.length > 0 && !marquee.isDragging && marquee.anchorRect ? (
+            <div
+              data-slot="merak-batch-bar"
+              role="toolbar"
+              aria-label="Selected blocks actions"
+              style={{
+                left: marquee.anchorRect.left,
+                top: marquee.anchorRect.top,
+              }}
+              {...stylex.props(styles.batchBar)}
+            >
+              <span {...stylex.props(styles.batchCount)}>
+                {marquee.selectedIds.length}{" "}
+                {marquee.selectedIds.length === 1 ? "block" : "blocks"}
+              </span>
+
+              {!readOnly ? (
+                <>
+                  <span {...stylex.props(styles.batchDivider)} />
+
+                  <Menu>
+                    <MenuTrigger
+                      data-variant="ghost"
+                      {...stylex.props(styles.batchActionButton)}
+                    >
+                      <span>Turn into</span>
+                      <ChevronDown size={13} />
+                    </MenuTrigger>
+                    <MenuContent align="start" sideOffset={6} {...stylex.props(styles.batchMenuContent)}>
+                      <MenuGroup>
+                        <MenuGroupLabel>Turn selected into</MenuGroupLabel>
+                        <MenuItem
+                          value="turn:paragraph"
+                          onSelect={() => handleBatchTurnInto(marquee.selectedIds, "paragraph")}
+                        >
+                          <MenuItemIcon>
+                            <Type size={13} />
+                          </MenuItemIcon>
+                          <span>Text</span>
+                        </MenuItem>
+                        <MenuItem
+                          value="turn:h1"
+                          onSelect={() =>
+                            handleBatchTurnInto(marquee.selectedIds, "heading", { level: 1 })
+                          }
+                        >
+                          <MenuItemIcon>
+                            <Heading1 size={13} />
+                          </MenuItemIcon>
+                          <span>Heading 1</span>
+                        </MenuItem>
+                        <MenuItem
+                          value="turn:h2"
+                          onSelect={() =>
+                            handleBatchTurnInto(marquee.selectedIds, "heading", { level: 2 })
+                          }
+                        >
+                          <MenuItemIcon>
+                            <Heading2 size={13} />
+                          </MenuItemIcon>
+                          <span>Heading 2</span>
+                        </MenuItem>
+                        <MenuItem
+                          value="turn:h3"
+                          onSelect={() =>
+                            handleBatchTurnInto(marquee.selectedIds, "heading", { level: 3 })
+                          }
+                        >
+                          <MenuItemIcon>
+                            <Heading3 size={13} />
+                          </MenuItemIcon>
+                          <span>Heading 3</span>
+                        </MenuItem>
+                        <MenuItem
+                          value="turn:bullet"
+                          onSelect={() => handleBatchTurnInto(marquee.selectedIds, "bulletListItem")}
+                        >
+                          <MenuItemIcon>
+                            <List size={13} />
+                          </MenuItemIcon>
+                          <span>Bullet List</span>
+                        </MenuItem>
+                        <MenuItem
+                          value="turn:numbered"
+                          onSelect={() =>
+                            handleBatchTurnInto(marquee.selectedIds, "numberedListItem")
+                          }
+                        >
+                          <MenuItemIcon>
+                            <ListOrdered size={13} />
+                          </MenuItemIcon>
+                          <span>Numbered List</span>
+                        </MenuItem>
+                        <MenuItem
+                          value="turn:check"
+                          onSelect={() => handleBatchTurnInto(marquee.selectedIds, "checkListItem")}
+                        >
+                          <MenuItemIcon>
+                            <CheckSquare size={13} />
+                          </MenuItemIcon>
+                          <span>To-do List</span>
+                        </MenuItem>
+                        <MenuItem
+                          value="turn:quote"
+                          onSelect={() => handleBatchTurnInto(marquee.selectedIds, "quote")}
+                        >
+                          <MenuItemIcon>
+                            <Quote size={13} />
+                          </MenuItemIcon>
+                          <span>Quote</span>
+                        </MenuItem>
+                        <MenuItem
+                          value="turn:code"
+                          onSelect={() => handleBatchTurnInto(marquee.selectedIds, "codeBlock")}
+                        >
+                          <MenuItemIcon>
+                            <Code2 size={13} />
+                          </MenuItemIcon>
+                          <span>Code Block</span>
+                        </MenuItem>
+                      </MenuGroup>
+                    </MenuContent>
+                  </Menu>
+
+                  <Button
+                    data-variant="ghost"
+                    {...stylex.props(styles.batchActionButton)}
+                    onClick={() => handleBatchDuplicate(marquee.selectedIds)}
+                  >
+                    <CopyPlus size={13} />
+                    <span>Duplicate</span>
+                  </Button>
+                </>
+              ) : null}
+
+              <Button
+                data-variant="ghost"
+                {...stylex.props(styles.batchActionButton)}
+                onClick={() => void handleBatchCopy(marquee.selectedIds)}
+              >
+                <Copy size={13} />
+                <span>Copy</span>
+              </Button>
+
+              {!readOnly ? (
+                <Button
+                  data-variant="ghost"
+                  {...stylex.props(styles.batchDeleteButton)}
+                  onClick={() => handleBatchDelete(marquee.selectedIds)}
+                >
+                  <Trash2 size={13} />
+                  <span>Delete</span>
+                </Button>
+              ) : null}
+
+              <Button
+                data-variant="ghost"
+                aria-label="Clear block selection"
+                {...stylex.props(styles.batchCloseButton)}
+                onClick={() => marquee.clearSelection()}
+              >
+                <X size={13} />
+              </Button>
+            </div>
+          ) : null}
         </div>
 
         <Dialog open={embedDialogOpen} onOpenChange={setEmbedDialogOpen}>
@@ -912,32 +1423,31 @@ export function MarkdownEditor({
                 </DialogDescription>
               </Stack>
 
-              <Card variant="subtle" padding="sm">
-                <Stack gap="sm">
-                  <Field>
-                    <FieldLabel>Target Node ID</FieldLabel>
-                    <Input
-                      value={embedNodeId}
-                      onValueChange={setEmbedNodeId}
-                      placeholder="e.g. node_abc123"
-                    />
-                  </Field>
+              <Stack gap="md">
+                <Field>
+                  <FieldLabel>Target Node ID</FieldLabel>
+                  <Input
+                    value={embedNodeId}
+                    onValueChange={setEmbedNodeId}
+                    placeholder="e.g. node_abc123"
+                  />
+                </Field>
 
-                  <Field>
-                    <FieldLabel>Height (px)</FieldLabel>
-                    <Input
-                      type="number"
-                      value={embedHeight}
-                      onValueChange={setEmbedHeight}
-                      placeholder={String(DEFAULT_EMBED_HEIGHT)}
-                    />
-                  </Field>
-                </Stack>
-              </Card>
+                <Field>
+                  <FieldLabel>Height (px)</FieldLabel>
+                  <Input
+                    type="number"
+                    value={embedHeight}
+                    onValueChange={setEmbedHeight}
+                    placeholder={String(DEFAULT_EMBED_HEIGHT)}
+                  />
+                </Field>
+              </Stack>
 
-              <div {...stylex.props(styles.dialogActions)}>
+              <div {...stylex.props(styles.dialogFooter)}>
                 <DialogClose>Cancel</DialogClose>
                 <Button
+                  data-variant="solid"
                   disabled={embedNodeId.trim().length === 0}
                   onClick={handleConfirmEmbed}
                 >

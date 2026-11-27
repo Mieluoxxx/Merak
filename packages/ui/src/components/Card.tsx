@@ -12,7 +12,9 @@ export interface CardProps {
 const styles = stylex.create({
   base: {
     borderRadius: radius.lg,
-    border: `1px solid ${colors.border}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.border,
     color: colors.text,
   },
   elevated: {

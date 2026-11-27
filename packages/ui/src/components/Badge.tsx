@@ -16,6 +16,9 @@ const styles = stylex.create({
     paddingBlock: space.xxs,
     paddingInline: space.sm,
     borderRadius: radius.full,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: "transparent",
     fontSize: font.sizeXs,
     fontWeight: 500,
     lineHeight: 1.4,
@@ -24,7 +27,7 @@ const styles = stylex.create({
   neutral: {
     backgroundColor: colors.bgSubtle,
     color: colors.textMuted,
-    border: `1px solid ${colors.border}`,
+    borderColor: colors.borderSubtle,
   },
   accent: {
     backgroundColor: colors.accentSubtle,

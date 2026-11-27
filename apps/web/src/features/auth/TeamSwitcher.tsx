@@ -13,6 +13,7 @@ import {
   Input,
   Menu,
   MenuContent,
+  MenuGroup,
   MenuGroupLabel,
   MenuItem,
   MenuItemIcon,
@@ -46,19 +47,25 @@ export interface TeamSwitcherProps {
 const styles = stylex.create({
   trigger: {
     width: "100%",
+    height: "auto",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: space.sm,
-    paddingBlock: space.xs,
-    paddingInline: space.sm,
-    borderRadius: radius.md,
-    border: `1px solid ${colors.border}`,
-    backgroundColor: colors.bgElevated,
+    gap: "10px",
+    paddingBlock: "6px",
+    paddingInline: "8px",
+    borderRadius: "7px",
+    borderWidth: 0,
+    borderStyle: "none",
+    backgroundColor: {
+      default: "transparent",
+      ":hover": colors.bgHover,
+    },
     color: colors.text,
     fontSize: font.sizeSm,
     fontWeight: 500,
     cursor: "pointer",
+    transition: "background-color 150ms ease",
   },
   orgIdentity: {
     display: "flex",
@@ -71,13 +78,17 @@ const styles = stylex.create({
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    width: "24px",
-    height: "24px",
-    borderRadius: radius.sm,
+    width: "28px",
+    height: "28px",
+    borderRadius: "7px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.accentSubtle,
     backgroundColor: colors.accentSubtle,
     color: colors.accent,
-    fontSize: font.sizeXs,
+    fontSize: "11px",
     fontWeight: 600,
+    letterSpacing: "0.02em",
     flexShrink: 0,
   },
   orgNameWrap: {
@@ -90,8 +101,12 @@ const styles = stylex.create({
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
-    maxWidth: "150px",
-    lineHeight: 1.25,
+    maxWidth: "156px",
+    fontSize: font.sizeSm,
+    fontWeight: 600,
+    letterSpacing: "-0.01em",
+    lineHeight: 1.3,
+    color: colors.text,
   },
   userEmail: {
     fontSize: "11px",
@@ -99,7 +114,14 @@ const styles = stylex.create({
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
-    maxWidth: "150px",
+    maxWidth: "156px",
+    lineHeight: 1.3,
+  },
+  triggerChevron: {
+    color: colors.textSubtle,
+    flexShrink: 0,
+    display: "inline-flex",
+    alignItems: "center",
   },
   menuContent: {
     minWidth: "236px",
@@ -126,7 +148,9 @@ const styles = stylex.create({
     paddingInline: space.md,
     borderRadius: radius.md,
     backgroundColor: "rgba(220, 38, 38, 0.1)",
-    border: `1px solid ${colors.danger}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.danger,
     color: colors.danger,
     fontSize: font.sizeSm,
   },
@@ -225,37 +249,41 @@ export function TeamSwitcher({ onOrganizationChanged, onSignedOut }: TeamSwitche
               ) : null}
             </span>
           </span>
-          <ChevronsUpDown size={14} />
+          <span {...stylex.props(styles.triggerChevron)}>
+            <ChevronsUpDown size={14} />
+          </span>
         </MenuTrigger>
 
         <MenuContent align="start" sideOffset={6} {...stylex.props(styles.menuContent)}>
-          <MenuGroupLabel>Teams</MenuGroupLabel>
-          {organizations.length > 0 ? (
-            organizations.map((org) => {
-              const isActive = org.id === currentOrg?.id;
-              return (
-                <MenuItem
-                  key={org.id}
-                  value={`org:${org.id}`}
-                  onSelect={() => {
-                    void handleSwitchOrganization(org.id);
-                  }}
-                >
-                  <MenuItemIcon>
-                    <Building2 size={14} />
-                  </MenuItemIcon>
-                  <span {...stylex.props(styles.itemRow)}>
-                    <span>{org.name}</span>
-                    {isActive ? <Check size={14} /> : null}
-                  </span>
-                </MenuItem>
-              );
-            })
-          ) : (
-            <MenuItem value="org:empty" disabled>
-              No teams loaded
-            </MenuItem>
-          )}
+          <MenuGroup>
+            <MenuGroupLabel>Teams</MenuGroupLabel>
+            {organizations.length > 0 ? (
+              organizations.map((org) => {
+                const isActive = org.id === currentOrg?.id;
+                return (
+                  <MenuItem
+                    key={org.id}
+                    value={`org:${org.id}`}
+                    onSelect={() => {
+                      void handleSwitchOrganization(org.id);
+                    }}
+                  >
+                    <MenuItemIcon>
+                      <Building2 size={14} />
+                    </MenuItemIcon>
+                    <span {...stylex.props(styles.itemRow)}>
+                      <span>{org.name}</span>
+                      {isActive ? <Check size={14} /> : null}
+                    </span>
+                  </MenuItem>
+                );
+              })
+            ) : (
+              <MenuItem value="org:empty" disabled>
+                No teams loaded
+              </MenuItem>
+            )}
+          </MenuGroup>
 
           <MenuSeparator />
 

@@ -534,11 +534,11 @@ export function registerMcpTools(
     {
       title: "Create Node",
       description:
-        'Create a new node ("doc", "excalidraw", "html", or "canvas") in a space, optionally nested under parentId.',
+        'Create a new node ("doc", "excalidraw", "html", "canvas", or "folder") in a space, optionally nested under parentId.',
       inputSchema: {
         spaceId: z.string().min(1).describe("Target space ID."),
         parentId: z.string().min(1).nullable().optional().describe("Optional parent node ID for nesting."),
-        type: nodeTypeSchema.describe('Node type: "doc", "excalidraw", "html", or "canvas".'),
+        type: nodeTypeSchema.describe('Node type: "doc", "excalidraw", "html", "canvas", or "folder".'),
         title: z.string().trim().min(1).max(200).describe("Node title."),
         icon: z.string().trim().max(64).nullable().optional().describe("Optional emoji or icon identifier."),
         content: z.string().optional().describe("Optional initial content string."),

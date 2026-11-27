@@ -2,8 +2,8 @@
 
 :root {
   color-scheme: light dark;
-  --merak-scrollbar-track: light-dark(#f1f1ef, #1b1c1f);
-  --merak-scrollbar-thumb: light-dark(#b7b7b2, #4d515b);
+  --merak-scrollbar-track: light-dark(#f8f8f7, #191919);
+  --merak-scrollbar-thumb: light-dark(#d3d1cb, #383836);
   scrollbar-color: var(--merak-scrollbar-thumb) var(--merak-scrollbar-track);
 }
 
@@ -43,16 +43,27 @@
   }
 
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Inter, Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    caret-color: currentColor;
   }
 
-  button,
-  input,
-  textarea,
-  select {
+  ::selection {
+    background: color-mix(in oklab, #2383e2 26%, transparent);
+  }
+
+  button:not([data-slot]),
+  input:not([data-slot]),
+  textarea:not([data-slot]),
+  select:not([data-slot]) {
     font: inherit;
     color: inherit;
+  }
+
+  button:not([data-slot]) {
+    border: 0;
+    background: transparent;
+    padding: 0;
   }
 }

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { createRequire } from "node:module";
+import type { NodeWebSocket } from "@hono/node-ws";
 import { API_ROUTES } from "@merak/shared";
 import { MERAK_ARTIFACT_CSS, MERAK_ARTIFACT_JS, UI_SDK_MANIFEST } from "@merak/ui/artifact";
 import { Hono } from "hono";
@@ -8,6 +9,7 @@ import { ZodError } from "zod";
 import { auth, type AuthInstance, type MerakDb } from "./auth/index.js";
 import { db, sqlite } from "./db/client.js";
 import { env } from "./env.js";
+import { mountMcpRoutes } from "./mcp/index.js";
 import {
   mountCoreRoutes,
   type MountCoreRoutesOptions,
@@ -37,7 +39,10 @@ export interface CreateAppOptions {
 
 export { mountCoreRoutes, type MountCoreRoutesOptions, type MountedCoreRoutes };
 
-export function createApp(options?: CreateAppOptions): Hono {
+export function createServerApp(options?: CreateAppOptions): {
+  app: Hono;
+  nodeWs?: NodeWebSocket;
+} {
   const app = new Hono();
   const sqliteInstance = options?.sqlite ?? sqlite;
   const dbInstance = options?.db ?? db;
@@ -122,15 +127,18 @@ export function createApp(options?: CreateAppOptions): Hono {
     return c.json(UI_SDK_MANIFEST);
   });
 
-  mountCoreRoutes(app, services, {
+  const { nodeWs } = mountCoreRoutes(app, services, {
     auth: authInstance,
     db: dbInstance,
     broadcaster: services.broadcaster,
     enableWs: options?.enableWs,
   });
 
-  // Wave 1 extension points:
-  // - Worker #2: mount Streamable HTTP MCP server (/mcp)
+  mountMcpRoutes(app, services);
 
-  return app;
+  return { app, nodeWs };
+}
+
+export function createApp(options?: CreateAppOptions): Hono {
+  return createServerApp(options).app;
 }

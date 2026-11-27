@@ -41,6 +41,7 @@ export const UI_SDK_MANIFEST = {
     "MenuContent",
     "MenuItem",
     "MenuSeparator",
+    "MenuGroup",
     "MenuGroupLabel",
     "Dialog",
     "DialogTrigger",

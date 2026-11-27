@@ -114,10 +114,15 @@ export async function createNode(input: CreateNodeInput): Promise<NodeDetailDto>
   });
 }
 
-export async function updateNode(nodeId: string, input: UpdateNodeInput): Promise<NodeDetailDto> {
+export async function updateNode(
+  nodeId: string,
+  input: UpdateNodeInput,
+  options?: { keepalive?: boolean },
+): Promise<NodeDetailDto> {
   return apiFetch<NodeDetailDto>(API_ROUTES.nodeById(nodeId), {
     method: "PATCH",
     body: JSON.stringify(input),
+    keepalive: options?.keepalive,
   });
 }
 

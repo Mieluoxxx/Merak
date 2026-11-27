@@ -2,8 +2,17 @@
 
 @layer ui-sdk {
   :where(:root, :host) {
-    --ui-radius: 6px;
-    --ui-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    --ui-background: light-dark(#ffffff, #252525);
+    --ui-foreground: light-dark(#37352f, #f0efed);
+    --ui-muted: light-dark(rgba(55, 53, 47, 0.06), rgba(255, 255, 255, 0.065));
+    --ui-muted-foreground: light-dark(#787774, #ada9a3);
+    --ui-border: light-dark(rgba(55, 53, 47, 0.11), #383836);
+    --ui-input: light-dark(rgba(55, 53, 47, 0.16), #383836);
+    --ui-primary: light-dark(#37352f, #f0efed);
+    --ui-primary-foreground: light-dark(#ffffff, #191919);
+    --ui-ring: light-dark(rgba(35, 131, 226, 0.24), rgba(78, 148, 236, 0.3));
+    --ui-radius: 8px;
+    --ui-font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Inter, Roboto, sans-serif;
     --ui-font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   }
 
@@ -17,5 +26,158 @@
     color-scheme: dark;
     --lightningcss-light: ;
     --lightningcss-dark: initial;
+  }
+
+  :is(
+    [data-slot="button"],
+    [data-slot="toggle"],
+    [data-slot="file-input-trigger"],
+    [data-slot="dialog-trigger"],
+    [data-slot="dialog-close"],
+    [data-slot="alert-dialog-trigger"],
+    [data-slot="alert-dialog-close"],
+    [data-slot="drawer-trigger"],
+    [data-slot="drawer-close"],
+    [data-slot="combobox-trigger"],
+    [data-slot="tooltip-trigger"],
+    [data-slot="popover-trigger"],
+    [data-slot="popover-close"],
+    [data-slot="menu-trigger"]
+  ) {
+    background: light-dark(#ffffff, rgba(255, 255, 255, 0.04));
+    border-color: light-dark(rgba(55, 53, 47, 0.15), #383836);
+    box-shadow: light-dark(
+      0 1px 2px rgba(55, 53, 47, 0.05),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04)
+    );
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease,
+      box-shadow 140ms ease,
+      opacity 140ms ease,
+      transform 140ms ease;
+
+    &:hover:not([data-disabled]) {
+      background: light-dark(rgba(55, 53, 47, 0.055), rgba(255, 255, 255, 0.085));
+      border-color: light-dark(rgba(55, 53, 47, 0.22), rgba(255, 255, 255, 0.18));
+    }
+
+    &:active:not([data-disabled]) {
+      transform: scale(0.985);
+    }
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px var(--ui-ring);
+      border-color: light-dark(rgba(35, 131, 226, 0.5), rgba(78, 148, 236, 0.55));
+    }
+  }
+
+  [data-slot="button"][data-variant="solid"] {
+    border-color: light-dark(transparent, rgba(255, 255, 255, 0.16));
+    background: var(--ui-primary);
+    color: var(--ui-primary-foreground);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    box-shadow: light-dark(
+      0 1px 2px rgba(15, 15, 15, 0.16),
+      0 1px 2px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.65)
+    );
+
+    &:hover:not([data-disabled]) {
+      background: light-dark(#2c2a25, #ffffff);
+      border-color: light-dark(transparent, rgba(255, 255, 255, 0.28));
+    }
+
+    &:disabled,
+    &[data-disabled] {
+      opacity: 0.45;
+      box-shadow: none;
+    }
+  }
+
+  :is(
+    [data-slot="button"],
+    [data-slot="dialog-trigger"],
+    [data-slot="popover-trigger"],
+    [data-slot="menu-trigger"]
+  )[data-variant="ghost"] {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    color: var(--ui-muted-foreground);
+
+    &:hover:not([data-disabled]) {
+      border-color: transparent;
+      background: var(--ui-muted);
+      color: var(--ui-foreground);
+    }
+  }
+
+  :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"])
+    :is([data-slot="button"], [data-slot="dialog-close"], [data-slot="alert-dialog-close"]):not(
+      [aria-label]
+    ) {
+    height: 34px;
+    padding-inline: 14px;
+    font-size: 0.8125rem;
+  }
+
+  :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"])
+    [data-slot="button"][data-variant="solid"] {
+    padding-inline: 16px;
+  }
+
+  [data-slot="segmented-control"] {
+    padding: 3px;
+    background: light-dark(rgba(15, 23, 42, 0.045), rgba(255, 255, 255, 0.04));
+    border-color: var(--ui-border);
+  }
+
+  [data-slot="segmented-control-indicator"] {
+    background: light-dark(#ffffff, rgba(255, 255, 255, 0.1));
+    border-color: light-dark(rgba(15, 23, 42, 0.08), rgba(255, 255, 255, 0.12));
+    box-shadow: light-dark(0 1px 2px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(0, 0, 0, 0.3));
+  }
+
+  :is([data-slot="menu-content"], [data-slot="popover-content"]) {
+    border-radius: 10px;
+    padding: 5px;
+    border-color: transparent;
+    box-shadow: light-dark(
+      0 0 0 1px rgba(15, 15, 15, 0.06),
+      0 10px 24px rgba(15, 15, 15, 0.12),
+      0 0 0 1px #383836,
+      0 14px 28px -6px rgba(0, 0, 0, 0.4),
+      0 2px 4px -1px rgba(0, 0, 0, 0.24)
+    );
+  }
+
+  [data-slot="menu-item"] {
+    min-height: 30px;
+    border-radius: 6px;
+  }
+
+  [data-slot="menu-group-label"] {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--ui-muted-foreground);
+    padding-block: 5px 3px;
+  }
+
+  :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"]) {
+    border-radius: 12px;
+    box-shadow: light-dark(
+      0 0 0 1px rgba(15, 15, 15, 0.06),
+      0 18px 40px rgba(15, 15, 15, 0.16),
+      0 0 0 1px #383836,
+      0 20px 44px rgba(0, 0, 0, 0.55)
+    );
+  }
+
+  [data-slot="separator"] {
+    background: var(--ui-border);
   }
 }

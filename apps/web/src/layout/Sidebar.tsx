@@ -16,6 +16,7 @@ import {
   Input,
   Menu,
   MenuContent,
+  MenuGroup,
   MenuGroupLabel,
   MenuItem,
   MenuItemIcon,
@@ -28,7 +29,6 @@ import {
   SegmentedControl,
   SegmentedControlIndicator,
   SegmentedControlItem,
-  Separator,
   Stack,
   Textarea,
   toast,
@@ -42,6 +42,7 @@ import {
   BookOpen,
   ChevronRight,
   FileText,
+  Folder,
   FolderGit2,
   Image as ImageIcon,
   KeyRound,
@@ -81,6 +82,7 @@ const DEFAULT_TITLES: Record<NodeType, string> = {
   excalidraw: "Untitled Whiteboard",
   html: "Untitled HTML Artifact",
   canvas: "Untitled Canvas",
+  folder: "Untitled Folder",
 };
 
 const styles = stylex.create({
@@ -90,15 +92,20 @@ const styles = stylex.create({
     height: "100%",
     minHeight: 0,
     backgroundColor: colors.bgSubtle,
-    borderRight: `1px solid ${colors.border}`,
+    borderRightWidth: "1px",
+    borderRightStyle: "solid",
+    borderRightColor: colors.borderSubtle,
     color: colors.text,
   },
   topSection: {
     display: "flex",
     flexDirection: "column",
-    gap: space.sm,
-    padding: space.md,
-    borderBottom: `1px solid ${colors.borderSubtle}`,
+    gap: "8px",
+    paddingTop: "10px",
+    paddingBottom: "4px",
+    paddingInline: "10px",
+    borderBottomWidth: 0,
+    borderBottomStyle: "none",
   },
   searchButton: {
     display: "flex",
@@ -106,18 +113,33 @@ const styles = stylex.create({
     justifyContent: "space-between",
     gap: space.sm,
     width: "100%",
-    paddingBlock: "6px",
-    paddingInline: space.sm,
-    borderRadius: radius.md,
-    border: `1px solid ${colors.border}`,
-    backgroundColor: colors.bg,
-    color: colors.textMuted,
-    fontSize: font.sizeSm,
+    height: "30px",
+    paddingBlock: 0,
+    paddingInline: "8px",
+    borderRadius: "7px",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.borderSubtle,
+    backgroundColor: {
+      default: colors.bgHover,
+      ":hover": colors.bgActive,
+    },
+    color: colors.textSubtle,
+    fontSize: "12.5px",
     cursor: "pointer",
+    transition: "background-color 150ms ease, border-color 150ms ease, color 150ms ease",
   },
   searchHint: {
+    paddingBlock: "1px",
+    paddingInline: "5px",
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgSubtle,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.borderSubtle,
     fontFamily: font.mono,
-    fontSize: "11px",
+    fontSize: "10.5px",
+    lineHeight: 1.3,
     color: colors.textSubtle,
   },
   scrollRoot: {
@@ -125,6 +147,9 @@ const styles = stylex.create({
     minHeight: 0,
     display: "flex",
     flexDirection: "column",
+    borderWidth: 0,
+    borderStyle: "none",
+    borderRadius: 0,
   },
   scrollViewport: {
     flex: "1 1 auto",
@@ -134,67 +159,81 @@ const styles = stylex.create({
   scrollContent: {
     display: "flex",
     flexDirection: "column",
-    gap: space.lg,
-    padding: space.md,
+    gap: "18px",
+    paddingBlock: "12px",
+    paddingInline: "10px",
   },
   section: {
     display: "flex",
     flexDirection: "column",
-    gap: space.xs,
+    gap: "2px",
   },
   sectionHeader: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: space.xs,
-    paddingInline: space.xs,
+    height: "24px",
+    paddingInline: "8px",
+    marginBottom: "2px",
   },
   sectionLabel: {
-    fontSize: "11px",
-    fontWeight: 600,
+    fontSize: "12px",
+    fontWeight: 500,
     color: colors.textSubtle,
-    textTransform: "uppercase",
-    letterSpacing: "0.06em",
   },
   sectionAddButton: {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    width: "20px",
-    height: "20px",
+    width: "22px",
+    height: "22px",
     borderRadius: radius.sm,
-    border: "none",
+    borderWidth: 0,
+    borderStyle: "none",
     backgroundColor: {
       default: "transparent",
       ":hover": colors.bgHover,
     },
-    color: colors.textSubtle,
+    color: {
+      default: colors.textSubtle,
+      ":hover": colors.text,
+    },
     cursor: "pointer",
     padding: 0,
+    transition: "background-color 150ms ease, color 150ms ease",
   },
   spaceRow: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: space.xs,
-    borderRadius: radius.sm,
-    paddingBlock: "4px",
-    paddingInline: space.xs,
+    minHeight: "30px",
+    borderRadius: "7px",
+    paddingBlock: "3px",
+    paddingInline: "8px",
     backgroundColor: {
       default: "transparent",
       ":hover": colors.bgHover,
     },
+    transition: "background-color 150ms ease",
   },
   spaceRowActive: {
-    backgroundColor: colors.bgActive,
+    backgroundColor: {
+      default: colors.bgActive,
+      ":hover": colors.bgActive,
+    },
   },
   spaceTrigger: {
     display: "flex",
     alignItems: "center",
-    gap: space.xs,
+    gap: "6px",
     minWidth: 0,
+    minHeight: "24px",
+    height: "auto",
     flex: "1 1 auto",
-    border: "none",
+    borderWidth: 0,
+    borderStyle: "none",
     backgroundColor: "transparent",
     color: colors.text,
     fontSize: font.sizeSm,
@@ -203,57 +242,91 @@ const styles = stylex.create({
     textAlign: "left",
     padding: 0,
   },
+  spaceIcon: {
+    color: colors.textMuted,
+    flexShrink: 0,
+    display: "inline-flex",
+    alignItems: "center",
+  },
+  spaceIconActive: {
+    color: colors.text,
+  },
   spaceName: {
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
+  chevron: {
+    color: colors.textSubtle,
+    flexShrink: 0,
+    transition: "transform 150ms ease",
+  },
   chevronOpen: {
     transform: "rotate(90deg)",
   },
   spaceTreeWrap: {
-    paddingLeft: space.sm,
-    paddingTop: space.xxs,
+    paddingLeft: "6px",
+    paddingTop: "2px",
   },
   emptySpaces: {
-    paddingBlock: space.xs,
-    paddingInline: space.sm,
+    paddingInline: "8px",
+    paddingBlock: "4px",
     fontSize: font.sizeXs,
     color: colors.textSubtle,
   },
   bottomNav: {
     display: "flex",
     flexDirection: "column",
-    gap: space.xxs,
-    padding: space.md,
-    borderTop: `1px solid ${colors.borderSubtle}`,
+    gap: "2px",
+    paddingBlock: "8px",
+    paddingInline: "10px",
+    borderTopWidth: "1px",
+    borderTopStyle: "solid",
+    borderTopColor: colors.borderSubtle,
   },
   navButton: {
     display: "flex",
     alignItems: "center",
     gap: space.sm,
     width: "100%",
-    paddingBlock: "6px",
-    paddingInline: space.sm,
-    borderRadius: radius.md,
-    border: "none",
+    height: "30px",
+    paddingBlock: 0,
+    paddingInline: "8px",
+    borderRadius: "7px",
+    borderWidth: 0,
+    borderStyle: "none",
     backgroundColor: {
       default: "transparent",
       ":hover": colors.bgHover,
     },
-    color: colors.textMuted,
+    color: {
+      default: colors.textMuted,
+      ":hover": colors.text,
+    },
     fontSize: font.sizeSm,
     fontWeight: 500,
     cursor: "pointer",
     textAlign: "left",
+    transition: "background-color 150ms ease, color 150ms ease",
   },
   navButtonActive: {
-    backgroundColor: colors.bgActive,
+    backgroundColor: {
+      default: colors.bgActive,
+      ":hover": colors.bgActive,
+    },
     color: colors.text,
   },
   dialogContent: {
     width: "100%",
     maxWidth: "440px",
+  },
+  dialogFooter: {
+    marginTop: "4px",
+    paddingTop: "14px",
+    borderTopWidth: "1px",
+    borderTopStyle: "solid",
+    borderTopColor: colors.borderSubtle,
+    gap: "10px",
   },
   form: {
     display: "flex",
@@ -266,7 +339,9 @@ const styles = stylex.create({
     paddingInline: space.md,
     borderRadius: radius.md,
     backgroundColor: "rgba(220, 38, 38, 0.1)",
-    border: `1px solid ${colors.danger}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: colors.danger,
     color: colors.danger,
     fontSize: font.sizeSm,
   },
@@ -385,7 +460,9 @@ export function Sidebar({
         </div>
 
         {list.length === 0 ? (
-          <div {...stylex.props(styles.emptySpaces)}>No {label.toLowerCase()} spaces yet</div>
+          <div {...stylex.props(styles.emptySpaces)}>
+            {kind === "project" ? "No projects yet" : "No knowledge spaces yet"}
+          </div>
         ) : (
           list.map((spaceItem) => {
             const expanded = isSpaceOpen(spaceItem.id);
@@ -414,9 +491,16 @@ export function Sidebar({
                   >
                     <ChevronRight
                       size={13}
-                      {...stylex.props(expanded && styles.chevronOpen)}
+                      {...stylex.props(styles.chevron, expanded && styles.chevronOpen)}
                     />
-                    <Icon size={14} />
+                    <span
+                      {...stylex.props(
+                        styles.spaceIcon,
+                        isActiveSpace && styles.spaceIconActive,
+                      )}
+                    >
+                      <Icon size={14} />
+                    </span>
                     <span title={spaceItem.name} {...stylex.props(styles.spaceName)}>
                       {spaceItem.name}
                     </span>
@@ -430,42 +514,48 @@ export function Sidebar({
                       <Plus size={13} />
                     </MenuTrigger>
                     <MenuContent align="end" sideOffset={4}>
-                      <MenuGroupLabel>New in {spaceItem.name}</MenuGroupLabel>
-                      {(["doc", "excalidraw", "html", "canvas"] as const).map((nodeType) => (
-                        <MenuItem
-                          key={nodeType}
-                          value={`space-create:${spaceItem.id}:${nodeType}`}
-                          onSelect={() =>
-                            createRootNodeMutation.mutate({
-                              spaceId: spaceItem.id,
-                              parentId: null,
-                              type: nodeType,
-                              title: DEFAULT_TITLES[nodeType],
-                            })
-                          }
-                        >
-                          <MenuItemIcon>
-                            {nodeType === "doc" ? (
-                              <FileText size={13} />
-                            ) : nodeType === "excalidraw" ? (
-                              <PenTool size={13} />
-                            ) : nodeType === "html" ? (
-                              <Blocks size={13} />
-                            ) : (
-                              <Network size={13} />
-                            )}
-                          </MenuItemIcon>
-                          <span>
-                            {nodeType === "doc"
-                              ? "Markdown Page"
-                              : nodeType === "excalidraw"
-                                ? "Excalidraw Whiteboard"
-                                : nodeType === "html"
-                                  ? "HTML Artifact"
-                                  : "Infinite Canvas"}
-                          </span>
-                        </MenuItem>
-                      ))}
+                      <MenuGroup>
+                        <MenuGroupLabel>New in {spaceItem.name}</MenuGroupLabel>
+                        {(["folder", "doc", "excalidraw", "html", "canvas"] as const).map((nodeType) => (
+                          <MenuItem
+                            key={nodeType}
+                            value={`space-create:${spaceItem.id}:${nodeType}`}
+                            onSelect={() =>
+                              createRootNodeMutation.mutate({
+                                spaceId: spaceItem.id,
+                                parentId: null,
+                                type: nodeType,
+                                title: DEFAULT_TITLES[nodeType],
+                              })
+                            }
+                          >
+                            <MenuItemIcon>
+                              {nodeType === "folder" ? (
+                                <Folder size={13} />
+                              ) : nodeType === "doc" ? (
+                                <FileText size={13} />
+                              ) : nodeType === "excalidraw" ? (
+                                <PenTool size={13} />
+                              ) : nodeType === "html" ? (
+                                <Blocks size={13} />
+                              ) : (
+                                <Network size={13} />
+                              )}
+                            </MenuItemIcon>
+                            <span>
+                              {nodeType === "folder"
+                                ? "Folder"
+                                : nodeType === "doc"
+                                  ? "Markdown Page"
+                                  : nodeType === "excalidraw"
+                                    ? "Excalidraw Whiteboard"
+                                    : nodeType === "html"
+                                      ? "HTML Artifact"
+                                      : "Infinite Canvas"}
+                            </span>
+                          </MenuItem>
+                        ))}
+                      </MenuGroup>
                     </MenuContent>
                   </Menu>
                 </div>
@@ -508,7 +598,7 @@ export function Sidebar({
             {...stylex.props(styles.searchButton)}
           >
             <Inline gap="xs">
-              <Search size={14} />
+              <Search size={13.5} />
               <span>Search workspace...</span>
             </Inline>
             <span {...stylex.props(styles.searchHint)}>{shortcutHint.text}</span>
@@ -520,7 +610,6 @@ export function Sidebar({
         <ScrollAreaViewport {...stylex.props(styles.scrollViewport)}>
           <ScrollAreaContent {...stylex.props(styles.scrollContent)}>
             {renderSpaceGroup("Knowledge Base", "knowledge", knowledgeSpaces)}
-            <Separator />
             {renderSpaceGroup("Projects", "project", projectSpaces)}
           </ScrollAreaContent>
         </ScrollAreaViewport>
@@ -608,7 +697,7 @@ export function Sidebar({
                 </div>
               ) : null}
 
-              <Inline justify="end" gap="sm">
+              <Inline justify="end" gap="sm" xstyle={styles.dialogFooter}>
                 <DialogClose disabled={createSpaceMutation.isPending}>Cancel</DialogClose>
                 <Button
                   type="submit"
