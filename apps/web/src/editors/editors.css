@@ -1,0 +1,75 @@
+/* Scoped third-party editor bridge styles aligned with @merak/ui/tokens.stylex */
+
+.merak-bn-container[data-merak-theme="light"] {
+  --bn-colors-editor-text: #18181b;
+  --bn-colors-editor-background: #ffffff;
+  --bn-colors-menu-text: #18181b;
+  --bn-colors-menu-background: #ffffff;
+  --bn-colors-tooltip-text: #18181b;
+  --bn-colors-tooltip-background: #f7f7f5;
+  --bn-colors-hovered-text: #18181b;
+  --bn-colors-hovered-background: rgba(15, 23, 42, 0.05);
+  --bn-colors-selected-text: #ffffff;
+  --bn-colors-selected-background: #2563eb;
+  --bn-colors-disabled-text: #8c8c94;
+  --bn-colors-disabled-background: #f7f7f5;
+  --bn-colors-shadow: rgba(0, 0, 0, 0.1);
+  --bn-colors-border: #e4e4e0;
+  --bn-colors-side-menu: #8c8c94;
+  --bn-border-radius: 8px;
+  --bn-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+}
+
+.merak-bn-container[data-merak-theme="dark"] {
+  --bn-colors-editor-text: #eceef2;
+  --bn-colors-editor-background: #111215;
+  --bn-colors-menu-text: #eceef2;
+  --bn-colors-menu-background: #1f2026;
+  --bn-colors-tooltip-text: #eceef2;
+  --bn-colors-tooltip-background: #18191d;
+  --bn-colors-hovered-text: #eceef2;
+  --bn-colors-hovered-background: rgba(255, 255, 255, 0.06);
+  --bn-colors-selected-text: #0b1220;
+  --bn-colors-selected-background: #60a5fa;
+  --bn-colors-disabled-text: #6e7380;
+  --bn-colors-disabled-background: #18191d;
+  --bn-colors-shadow: rgba(0, 0, 0, 0.55);
+  --bn-colors-border: #2c2e36;
+  --bn-colors-side-menu: #6e7380;
+  --bn-border-radius: 8px;
+  --bn-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+}
+
+.merak-bn-container .bn-container {
+  height: 100%;
+  background: transparent;
+}
+
+.merak-bn-container .bn-editor {
+  min-height: 100%;
+  background: transparent;
+  padding-inline: 44px;
+  padding-block: 24px;
+}
+
+.merak-cm-host .cm-editor {
+  height: 100%;
+  font-size: 13px;
+}
+
+.merak-cm-host .cm-scroller {
+  overflow: auto;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+}
+
+.merak-excalidraw-host .excalidraw {
+  height: 100%;
+  width: 100%;
+}
+
+.merak-canvas-host .react-flow__node {
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
